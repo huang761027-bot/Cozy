@@ -57,7 +57,8 @@ namespace Cozy.Controllers
                 search = search.Trim();
                 query = query.Where(p => p.Title.Contains(search) || 
                                          (p.Customer != null && p.Customer.Name.Contains(search)) ||
-                                         (p.Notes != null && p.Notes.Contains(search)));
+                                         (p.Notes != null && p.Notes.Contains(search)) ||
+                                         (p.InvoiceNumber != null && p.InvoiceNumber.Contains(search)));
             }
 
             var list = await query
@@ -66,7 +67,9 @@ namespace Cozy.Controllers
                 {
                     p.Id,
                     p.CustomerId,
-                    CustomerName = p.Customer != null ? p.Customer.Name : "未指定客戶",
+                    CustomerName = p.Customer != null ? p.Customer.Name : "散客 (現場購買)",
+                    CustomerPhone = p.Customer != null ? p.Customer.Phone : null,
+                    CustomerCategory = p.Customer != null ? p.Customer.Category : null,
                     p.QuotationId,
                     QuotationNumber = p.Quotation != null ? p.Quotation.QuotationNumber : null,
                     p.Title,
@@ -109,6 +112,12 @@ namespace Cozy.Controllers
                 return BadRequest(new { message = "收費項目說明為必填項目" });
             }
 
+            // If customerId is 0 or not found, set to null (anonymous customer)
+            if (payment.CustomerId.HasValue && payment.CustomerId.Value <= 0)
+            {
+                payment.CustomerId = null;
+            }
+
             payment.CreatedAt = DateTime.UtcNow;
             _context.Payments.Add(payment);
             await _context.SaveChangesAsync();
@@ -131,7 +140,7 @@ namespace Cozy.Controllers
                 return NotFound(new { message = "找不到此收費記錄" });
             }
 
-            existing.CustomerId = payment.CustomerId;
+            existing.CustomerId = (payment.CustomerId.HasValue && payment.CustomerId.Value > 0) ? payment.CustomerId : null;
             existing.QuotationId = payment.QuotationId;
             existing.Title = payment.Title;
             existing.Amount = payment.Amount;

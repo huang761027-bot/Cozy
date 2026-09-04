@@ -327,9 +327,9 @@
     <div class="modal-body">
       <input type="hidden" id="worklog-id">
       <div class="form-group">
-        <label>關聯客戶</label>
+        <label>關聯客戶 <span id="worklog-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none;">(已鎖定客戶)</span></label>
         <select id="worklog-customer" class="select-input">
-          <option value="">-- 請選擇客戶 --</option>
+          <option value="">-- 無關聯客戶 / 內部行程 --</option>
         </select>
       </div>
       <div class="form-group">
@@ -388,7 +388,7 @@
       
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
-          <label>關聯客戶 *</label>
+          <label>關聯客戶 * <span id="quotation-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none;">(已鎖定客戶)</span></label>
           <select id="quotation-customer" class="select-input" required>
             <option value="">-- 請選擇客戶 --</option>
           </select>
@@ -487,10 +487,11 @@
     <div class="modal-body">
       <input type="hidden" id="payment-id">
       <input type="hidden" id="payment-quotation-id">
+      <input type="hidden" id="payment-locked-customer-id">
       <div class="form-group">
-        <label>客戶姓名 / 公司 *</label>
-        <select id="payment-customer" class="select-input" required>
-          <option value="">-- 請選擇客戶 --</option>
+        <label>客戶姓名 / 公司 <span id="payment-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none; font-weight:600;">(已鎖定此客戶，不可修改)</span> <span id="payment-customer-optional-hint" style="font-size:12px; color:var(--text-muted); font-weight:normal;">(選填，散客/現場購買可不選)</span></label>
+        <select id="payment-customer" class="select-input">
+          <option value="">-- 散客 / 現場購買 (不記客戶) --</option>
         </select>
       </div>
       <div class="form-group">
@@ -512,8 +513,8 @@
         <div class="form-group">
           <label>收款方式</label>
           <select id="payment-method" class="select-input">
+            <option value="現金" selected>現金</option>
             <option value="匯款">銀行匯款</option>
-            <option value="現金">現金</option>
             <option value="LINE Pay">LINE Pay</option>
             <option value="信用卡">信用卡</option>
             <option value="支票">支票</option>
@@ -557,9 +558,9 @@
     </div>
     <div class="modal-body">
       <div class="form-group">
-        <label>選擇客戶 *</label>
-        <select id="quick-payment-customer" class="select-input" required>
-          <option value="">-- 請選擇客戶 --</option>
+        <label>選擇客戶 <span style="font-size:12px; color:var(--text-muted); font-weight:normal;">(選填，散客可不選)</span></label>
+        <select id="quick-payment-customer" class="select-input">
+          <option value="">-- 散客 / 現場購買 (不記客戶) --</option>
         </select>
       </div>
       <div class="form-group">

@@ -19,24 +19,26 @@ namespace Cozy.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // Customers
+            // Customers -> WorkLogs (SetNull on delete)
             modelBuilder.Entity<Customer>()
                 .HasMany(c => c.WorkLogs)
                 .WithOne(w => w.Customer)
                 .HasForeignKey(w => w.CustomerId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            // Customers -> Quotations (Cascade on delete)
             modelBuilder.Entity<Customer>()
                 .HasMany(c => c.Quotations)
                 .WithOne(q => q.Customer)
                 .HasForeignKey(q => q.CustomerId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Customers -> Payments (SetNull on delete since payments can be standalone/anonymous)
             modelBuilder.Entity<Customer>()
                 .HasMany(c => c.Payments)
                 .WithOne(p => p.Customer)
                 .HasForeignKey(p => p.CustomerId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.SetNull);
 
             // Quotation and items
             modelBuilder.Entity<Quotation>()
@@ -48,6 +50,9 @@ namespace Cozy.Data
             // Indexing for faster searching
             modelBuilder.Entity<Customer>()
                 .HasIndex(c => c.Name);
+
+            modelBuilder.Entity<Customer>()
+                .HasIndex(c => c.Category);
 
             modelBuilder.Entity<WorkLog>()
                 .HasIndex(w => w.ScheduledAt);

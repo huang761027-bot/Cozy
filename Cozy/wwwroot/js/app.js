@@ -227,7 +227,6 @@ function applyVoiceResult() {
     if (amountMatch) {
       document.getElementById('payment-amount').value = amountMatch[0];
     }
-    // Try matching customer name
     matchAndSelectCustomer(text, 'payment-customer');
     return;
   }
@@ -389,15 +388,39 @@ function triggerCustomerAction(customerId, actionType) {
 }
 
 function populateCustomerDropdowns() {
-  const dropdownIds = ['worklog-customer', 'quotation-customer', 'payment-customer', 'quick-payment-customer'];
-  dropdownIds.forEach(id => {
-    const select = document.getElementById(id);
-    if (!select) return;
-    const currentVal = select.value;
-    select.innerHTML = '<option value="">-- 請選擇客戶 --</option>' +
-      customersCache.map(c => `<option value="${c.id}">[${c.category || '個人'}] ${c.name} (${c.phone})</option>`).join('');
-    if (currentVal) select.value = currentVal;
-  });
+  const optionsHtml = customersCache.map(c => `<option value="${c.id}">[${c.category || '個人'}] ${c.name} (${c.phone})</option>`).join('');
+
+  // Worklogs
+  const worklogSelect = document.getElementById('worklog-customer');
+  if (worklogSelect) {
+    const cur = worklogSelect.value;
+    worklogSelect.innerHTML = '<option value="">-- 無關聯客戶 / 內部行程 --</option>' + optionsHtml;
+    if (cur) worklogSelect.value = cur;
+  }
+
+  // Quotations
+  const quoteSelect = document.getElementById('quotation-customer');
+  if (quoteSelect) {
+    const cur = quoteSelect.value;
+    quoteSelect.innerHTML = '<option value="">-- 請選擇客戶 --</option>' + optionsHtml;
+    if (cur) quoteSelect.value = cur;
+  }
+
+  // Payments (Default top is 散客 / 現場購買)
+  const paySelect = document.getElementById('payment-customer');
+  if (paySelect) {
+    const cur = paySelect.value;
+    paySelect.innerHTML = '<option value="">-- 散客 / 現場購買 (不記客戶) --</option>' + optionsHtml;
+    if (cur) paySelect.value = cur;
+  }
+
+  // Quick Payment
+  const quickSelect = document.getElementById('quick-payment-customer');
+  if (quickSelect) {
+    const cur = quickSelect.value;
+    quickSelect.innerHTML = '<option value="">-- 散客 / 現場購買 (不記客戶) --</option>' + optionsHtml;
+    if (cur) quickSelect.value = cur;
+  }
 }
 
 function openCustomerModal(id = null) {
@@ -552,8 +575,20 @@ function openWorkLogModal(id = null, preSelectCustomerId = null) {
   document.getElementById('modal-worklog-title').innerText = id ? '編輯工作行程' : '排定工作行程';
   populateCustomerDropdowns();
 
+  const customerSelect = document.getElementById('worklog-customer');
+  const lockedHint = document.getElementById('worklog-customer-locked-hint');
+
+  if (preSelectCustomerId) {
+    customerSelect.value = preSelectCustomerId;
+    customerSelect.disabled = true;
+    if (lockedHint) lockedHint.style.display = 'inline';
+  } else {
+    customerSelect.disabled = false;
+    if (lockedHint) lockedHint.style.display = 'none';
+    if (!id) customerSelect.value = '';
+  }
+
   if (!id) {
-    document.getElementById('worklog-customer').value = preSelectCustomerId || '';
     document.getElementById('worklog-title-input').value = '';
     const nowIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     document.getElementById('worklog-time').value = nowIso;
@@ -573,7 +608,12 @@ async function editWorkLog(id) {
   document.getElementById('modal-worklog-title').innerText = '編輯工作行程';
   populateCustomerDropdowns();
 
-  document.getElementById('worklog-customer').value = w.customerId || '';
+  const customerSelect = document.getElementById('worklog-customer');
+  customerSelect.disabled = false;
+  customerSelect.value = w.customerId || '';
+  const lockedHint = document.getElementById('worklog-customer-locked-hint');
+  if (lockedHint) lockedHint.style.display = 'none';
+
   document.getElementById('worklog-title-input').value = w.title || '';
   document.getElementById('worklog-time').value = w.scheduledAt ? w.scheduledAt.substring(0, 16) : '';
   document.getElementById('worklog-location').value = w.location || '';
@@ -780,8 +820,16 @@ function openQuotationModal(id = null, preSelectCustomerId = null) {
   document.getElementById('quotation-notes').value = '1. 報價有效期限 14 天。\n2. 確認簽回後開工，完工結算付清。\n3. 本報價含稅及施工責任險。';
   
   populateCustomerDropdowns();
+  const customerSelect = document.getElementById('quotation-customer');
+  const lockedHint = document.getElementById('quotation-customer-locked-hint');
+
   if (preSelectCustomerId) {
-    document.getElementById('quotation-customer').value = preSelectCustomerId;
+    customerSelect.value = preSelectCustomerId;
+    customerSelect.disabled = true;
+    if (lockedHint) lockedHint.style.display = 'inline';
+  } else {
+    customerSelect.disabled = false;
+    if (lockedHint) lockedHint.style.display = 'none';
   }
 
   const tbody = document.getElementById('quotation-items-body');
@@ -827,7 +875,8 @@ function calculateQuotationTotal() {
 
 async function saveQuotation() {
   const id = document.getElementById('quotation-id').value;
-  const customerId = document.getElementById('quotation-customer').value;
+  const customerSelect = document.getElementById('quotation-customer');
+  const customerId = customerSelect.value;
   const title = document.getElementById('quotation-title-input').value.trim();
 
   if (!customerId) {
@@ -897,7 +946,13 @@ async function editQuotation(id) {
   document.getElementById('modal-quotation-title').innerText = '編輯報價單';
   document.getElementById('quotation-number').value = q.quotationNumber || '';
   populateCustomerDropdowns();
-  document.getElementById('quotation-customer').value = q.customerId;
+  
+  const customerSelect = document.getElementById('quotation-customer');
+  customerSelect.disabled = false;
+  customerSelect.value = q.customerId;
+  const lockedHint = document.getElementById('quotation-customer-locked-hint');
+  if (lockedHint) lockedHint.style.display = 'none';
+
   document.getElementById('quotation-title-input').value = q.title || '';
   document.getElementById('quotation-date').value = q.issueDate ? q.issueDate.slice(0, 10) : '';
   document.getElementById('quotation-status').value = q.status || '草稿';
@@ -992,7 +1047,7 @@ async function deleteQuotation(id) {
   if (res.ok) loadQuotations();
 }
 
-// ==================== 5. 收費紀錄 (PAYMENTS) ====================
+// ==================== 5. 收費紀錄 (PAYMENTS - Optional Customer / Locked when from Customer List) ====================
 async function loadPayments() {
   const search = document.getElementById('payment-search').value;
   const status = document.getElementById('payment-status-filter').value;
@@ -1002,7 +1057,7 @@ async function loadPayments() {
     const listEl = document.getElementById('payments-list');
 
     if (data.length === 0) {
-      listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 40px;">尚無收費記錄，點擊「單獨新增收費」或從報價單轉入</p>';
+      listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 40px;">尚無收費記錄，點擊「單獨新增收費」或從客戶/報價單轉入</p>';
       return;
     }
 
@@ -1014,7 +1069,7 @@ async function loadPayments() {
               <span>${p.title}</span>
               <span style="color: var(--success); font-size: 18px; font-weight: 700;">+${formatCurrency(p.amount)}</span>
               <span class="badge ${p.status === '已收款' ? 'badge-success' : 'badge-warning'}">${p.status}</span>
-              ${p.quotationNumber ? `<span class="badge badge-info" style="font-size: 11px;"><i class="fa-solid fa-file-invoice"></i> 來自報價單 ${p.quotationNumber}</span>` : '<span class="badge badge-gray" style="font-size: 11px;">單一產品/單獨收費</span>'}
+              ${p.quotationNumber ? `<span class="badge badge-info" style="font-size: 11px;"><i class="fa-solid fa-file-invoice"></i> 來自報價單 ${p.quotationNumber}</span>` : (!p.customerId ? '<span class="badge badge-gray" style="font-size: 11px;">散客 / 現場購買</span>' : '<span class="badge badge-gray" style="font-size: 11px;">單一產品收費</span>')}
             </div>
             <div class="list-item-sub">
               <span><i class="fa-solid fa-user"></i> <b>${p.customerName}</b></span>
@@ -1041,12 +1096,32 @@ function openPaymentModal(id = null, preSelectCustomerId = null) {
   document.getElementById('modal-payment-title').innerText = id ? '編輯收費紀錄' : '新增收費紀錄 (購買單一產品/收款)';
   populateCustomerDropdowns();
 
+  const customerSelect = document.getElementById('payment-customer');
+  const lockedInput = document.getElementById('payment-locked-customer-id');
+  const lockedHint = document.getElementById('payment-customer-locked-hint');
+  const optionalHint = document.getElementById('payment-customer-optional-hint');
+
+  if (preSelectCustomerId) {
+    // 由客戶列表點選產生收費 -> 客戶名稱鎖定不可編輯
+    customerSelect.value = preSelectCustomerId;
+    customerSelect.disabled = true;
+    lockedInput.value = preSelectCustomerId;
+    if (lockedHint) lockedHint.style.display = 'inline';
+    if (optionalHint) optionalHint.style.display = 'none';
+  } else {
+    // 單獨新增收費 -> 客戶可選填或為散客
+    customerSelect.disabled = false;
+    lockedInput.value = '';
+    if (lockedHint) lockedHint.style.display = 'none';
+    if (optionalHint) optionalHint.style.display = 'inline';
+    if (!id) customerSelect.value = '';
+  }
+
   if (!id) {
-    document.getElementById('payment-customer').value = preSelectCustomerId || '';
     document.getElementById('payment-title-input').value = '';
     document.getElementById('payment-amount').value = '5000';
     document.getElementById('payment-date').value = new Date().toISOString().slice(0, 10);
-    document.getElementById('payment-method').value = '匯款';
+    document.getElementById('payment-method').value = '現金';
     document.getElementById('payment-status').value = '已收款';
     document.getElementById('payment-invoice').value = '';
     document.getElementById('payment-notes').value = '';
@@ -1063,11 +1138,20 @@ async function editPayment(id) {
   document.getElementById('modal-payment-title').innerText = '編輯收費紀錄';
   populateCustomerDropdowns();
 
-  document.getElementById('payment-customer').value = p.customerId;
+  const customerSelect = document.getElementById('payment-customer');
+  customerSelect.disabled = false;
+  customerSelect.value = p.customerId || '';
+  document.getElementById('payment-locked-customer-id').value = '';
+  
+  const lockedHint = document.getElementById('payment-customer-locked-hint');
+  const optionalHint = document.getElementById('payment-customer-optional-hint');
+  if (lockedHint) lockedHint.style.display = 'none';
+  if (optionalHint) optionalHint.style.display = 'inline';
+
   document.getElementById('payment-title-input').value = p.title || '';
   document.getElementById('payment-amount').value = p.amount;
   document.getElementById('payment-date').value = p.paymentDate ? p.paymentDate.slice(0, 10) : '';
-  document.getElementById('payment-method').value = p.paymentMethod || '匯款';
+  document.getElementById('payment-method').value = p.paymentMethod || '現金';
   document.getElementById('payment-status').value = p.status || '已收款';
   document.getElementById('payment-invoice').value = p.invoiceNumber || '';
   document.getElementById('payment-notes').value = p.notes || '';
@@ -1077,16 +1161,13 @@ async function editPayment(id) {
 
 async function savePayment() {
   const id = document.getElementById('payment-id').value;
-  const customerId = document.getElementById('payment-customer').value;
+  const lockedId = document.getElementById('payment-locked-customer-id').value;
+  const customerIdVal = lockedId || document.getElementById('payment-customer').value;
   const title = document.getElementById('payment-title-input').value.trim();
   const amount = parseFloat(document.getElementById('payment-amount').value);
 
-  if (!customerId) {
-    alert('請選擇客戶！');
-    return;
-  }
   if (!title) {
-    alert('請填寫收費項目說明！');
+    alert('請填寫收費項目說明 (如: 購買產品A / 現場收款)！');
     return;
   }
   if (isNaN(amount) || amount < 0) {
@@ -1096,7 +1177,7 @@ async function savePayment() {
 
   const payload = {
     id: id ? parseInt(id) : 0,
-    customerId: parseInt(customerId),
+    customerId: customerIdVal ? parseInt(customerIdVal) : null,
     title,
     amount,
     paymentDate: new Date(document.getElementById('payment-date').value).toISOString(),
@@ -1144,19 +1225,15 @@ async function saveQuickPayment() {
   const title = document.getElementById('quick-payment-title').value.trim();
   const amount = parseFloat(document.getElementById('quick-payment-amount').value);
 
-  if (!customerId) {
-    alert('請選擇客戶！');
-    return;
-  }
   if (!title) {
     alert('請輸入項目說明！');
     return;
   }
 
   const payload = {
-    customerId: parseInt(customerId),
+    customerId: customerId ? parseInt(customerId) : null,
     title,
-    amount,
+    amount: isNaN(amount) ? 5000 : amount,
     paymentDate: new Date().toISOString(),
     paymentMethod: '現金',
     status: '已收款'

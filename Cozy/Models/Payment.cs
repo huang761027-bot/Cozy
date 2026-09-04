@@ -9,7 +9,7 @@ namespace Cozy.Models
         [Key]
         public int Id { get; set; }
 
-        public int CustomerId { get; set; }
+        public int? CustomerId { get; set; } // Nullable: 散客 / 現場購買可不填客戶
 
         [ForeignKey("CustomerId")]
         public Customer? Customer { get; set; }
@@ -19,9 +19,9 @@ namespace Cozy.Models
         [ForeignKey("QuotationId")]
         public Quotation? Quotation { get; set; }
 
-        [Required]
+        [Required(ErrorMessage = "收費項目說明為必填項目")]
         [MaxLength(200)]
-        public string Title { get; set; } = string.Empty; // 例: "專案頭期款", "維護費 $5000"
+        public string Title { get; set; } = string.Empty; // 例: "購買產品A", "尾款 $5000"
 
         [Column(TypeName = "decimal(18, 2)")]
         public decimal Amount { get; set; } = 0;
@@ -29,7 +29,7 @@ namespace Cozy.Models
         public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
 
         [MaxLength(50)]
-        public string PaymentMethod { get; set; } = "匯款"; // 現金, 匯款, 信用卡, LINE Pay, 支票
+        public string PaymentMethod { get; set; } = "現金"; // 現金, 匯款, LINE Pay, 信用卡, 支票
 
         [MaxLength(50)]
         public string Status { get; set; } = "已收款"; // 待收款, 已收款, 已開立發票, 已退款
