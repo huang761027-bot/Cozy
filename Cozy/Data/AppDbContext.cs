@@ -1,0 +1,63 @@
+using Microsoft.EntityFrameworkCore;
+using Cozy.Models;
+
+namespace Cozy.Data
+{
+    public class AppDbContext : DbContext
+    {
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+        {
+        }
+
+        public DbSet<Customer> Customers => Set<Customer>();
+        public DbSet<WorkLog> WorkLogs => Set<WorkLog>();
+        public DbSet<Quotation> Quotations => Set<Quotation>();
+        public DbSet<QuotationItem> QuotationItems => Set<QuotationItem>();
+        public DbSet<Payment> Payments => Set<Payment>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            // Customers
+            modelBuilder.Entity<Customer>()
+                .HasMany(c => c.WorkLogs)
+                .WithOne(w => w.Customer)
+                .HasForeignKey(w => w.CustomerId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Customer>()
+                .HasMany(c => c.Quotations)
+                .WithOne(q => q.Customer)
+                .HasForeignKey(q => q.CustomerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Customer>()
+                .HasMany(c => c.Payments)
+                .WithOne(p => p.Customer)
+                .HasForeignKey(p => p.CustomerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Quotation and items
+            modelBuilder.Entity<Quotation>()
+                .HasMany(q => q.Items)
+                .WithOne(i => i.Quotation)
+                .HasForeignKey(i => i.QuotationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Indexing for faster searching
+            modelBuilder.Entity<Customer>()
+                .HasIndex(c => c.Name);
+
+            modelBuilder.Entity<WorkLog>()
+                .HasIndex(w => w.ScheduledAt);
+
+            modelBuilder.Entity<Quotation>()
+                .HasIndex(q => q.QuotationNumber)
+                .IsUnique();
+
+            modelBuilder.Entity<Payment>()
+                .HasIndex(p => p.PaymentDate);
+        }
+    }
+}

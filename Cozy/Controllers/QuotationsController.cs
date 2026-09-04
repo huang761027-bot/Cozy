@@ -1,0 +1,174 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Cozy.Data;
+using Cozy.Models;
+
+namespace Cozy.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class QuotationsController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public QuotationsController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // GET: api/Quotations
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<object>>> GetQuotations([FromQuery] int? customerId, [FromQuery] string? status, [FromQuery] string? search)
+        {
+            var query = _context.Quotations.Include(q => q.Customer).AsQueryable();
+
+            if (customerId.HasValue)
+            {
+                query = query.Where(q => q.CustomerId == customerId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                query = query.Where(q => q.Status == status);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                search = search.Trim();
+                query = query.Where(q => q.QuotationNumber.Contains(search) || 
+                                         q.Title.Contains(search) ||
+                                         (q.Customer != null && q.Customer.Name.Contains(search)));
+            }
+
+            var list = await query
+                .OrderByDescending(q => q.IssueDate)
+                .Select(q => new
+                {
+                    q.Id,
+                    q.QuotationNumber,
+                    q.CustomerId,
+                    CustomerName = q.Customer != null ? q.Customer.Name : "",
+                    CustomerPhone = q.Customer != null ? q.Customer.Phone : "",
+                    q.Title,
+                    q.IssueDate,
+                    q.ExpiryDate,
+                    q.TotalAmount,
+                    q.Status,
+                    q.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(list);
+        }
+
+        // GET: api/Quotations/5
+        [HttpGet("{id}")]
+        public async Task<ActionResult<Quotation>> GetQuotation(int id)
+        {
+            var quotation = await _context.Quotations
+                .Include(q => q.Customer)
+                .Include(q => q.Items)
+                .FirstOrDefaultAsync(q => q.Id == id);
+
+            if (quotation == null)
+            {
+                return NotFound(new { message = "找不到此報價單" });
+            }
+
+            return quotation;
+        }
+
+        // POST: api/Quotations
+        [HttpPost]
+        public async Task<ActionResult<Quotation>> CreateQuotation([FromBody] Quotation quotation)
+        {
+            if (string.IsNullOrWhiteSpace(quotation.QuotationNumber))
+            {
+                // Auto generate quotation number like QT-20260904-001
+                string todayPrefix = $"QT-{DateTime.UtcNow:yyyyMMdd}";
+                int countToday = await _context.Quotations.CountAsync(q => q.QuotationNumber.StartsWith(todayPrefix));
+                quotation.QuotationNumber = $"{todayPrefix}-{(countToday + 1):D3}";
+            }
+
+            // Recalculate item subtotals and total amount
+            decimal total = 0;
+            if (quotation.Items != null)
+            {
+                foreach (var item in quotation.Items)
+                {
+                    item.Subtotal = item.Quantity * item.UnitPrice;
+                    total += item.Subtotal;
+                }
+            }
+            quotation.TotalAmount = total;
+            quotation.CreatedAt = DateTime.UtcNow;
+
+            _context.Quotations.Add(quotation);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetQuotation), new { id = quotation.Id }, quotation);
+        }
+
+        // PUT: api/Quotations/5
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateQuotation(int id, [FromBody] Quotation quotation)
+        {
+            if (id != quotation.Id)
+            {
+                return BadRequest(new { message = "ID 不符" });
+            }
+
+            var existing = await _context.Quotations
+                .Include(q => q.Items)
+                .FirstOrDefaultAsync(q => q.Id == id);
+
+            if (existing == null)
+            {
+                return NotFound(new { message = "找不到此報價單" });
+            }
+
+            existing.CustomerId = quotation.CustomerId;
+            existing.Title = quotation.Title;
+            existing.IssueDate = quotation.IssueDate;
+            existing.ExpiryDate = quotation.ExpiryDate;
+            existing.Status = quotation.Status;
+            existing.Notes = quotation.Notes;
+
+            // Update items
+            _context.QuotationItems.RemoveRange(existing.Items);
+            existing.Items = quotation.Items ?? new List<QuotationItem>();
+
+            decimal total = 0;
+            foreach (var item in existing.Items)
+            {
+                item.Subtotal = item.Quantity * item.UnitPrice;
+                total += item.Subtotal;
+            }
+            existing.TotalAmount = total;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(existing);
+        }
+
+        // DELETE: api/Quotations/5
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteQuotation(int id)
+        {
+            var quotation = await _context.Quotations.FindAsync(id);
+            if (quotation == null)
+            {
+                return NotFound(new { message = "找不到此報價單" });
+            }
+
+            _context.Quotations.Remove(quotation);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "報價單已刪除" });
+        }
+    }
+}

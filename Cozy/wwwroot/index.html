@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Cozy 業務助理 - 客戶、行程、報價與收費管理</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cozy">
+  <link rel="stylesheet" href="/css/app.css">
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<div class="app-container">
+  <!-- Desktop Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <i class="fa-solid fa-briefcase brand-icon"></i>
+      <span>Cozy 業務助理</span>
+    </div>
+    <nav class="nav-links">
+      <a class="nav-item active" data-tab="dashboard">
+        <i class="fa-solid fa-chart-pie"></i>
+        <span>儀表板總覽</span>
+      </a>
+      <a class="nav-item" data-tab="customers">
+        <i class="fa-solid fa-users"></i>
+        <span>客戶資料</span>
+      </a>
+      <a class="nav-item" data-tab="worklogs">
+        <i class="fa-solid fa-calendar-check"></i>
+        <span>工作行程</span>
+      </a>
+      <a class="nav-item" data-tab="quotations">
+        <i class="fa-solid fa-file-invoice-dollar"></i>
+        <span>報價單管理</span>
+      </a>
+      <a class="nav-item" data-tab="payments">
+        <i class="fa-solid fa-wallet"></i>
+        <span>收費紀錄</span>
+      </a>
+    </nav>
+    <div style="margin-top: auto; font-size: 12px; color: #64748b; text-align: center;">
+      .NET 8 & MySQL on Railway
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="main-wrapper">
+    <!-- Top Header -->
+    <header class="top-header">
+      <h1 class="page-title" id="page-title">儀表板總覽</h1>
+      <div class="header-actions">
+        <button class="quick-charge-btn" onclick="openQuickPaymentModal()">
+          <i class="fa-solid fa-bolt"></i> 快速記帳 (例: $5000)
+        </button>
+      </div>
+    </header>
+
+    <!-- SECTION: Dashboard -->
+    <section id="view-dashboard" class="content-view">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-label"><i class="fa-solid fa-users"></i> 總客戶數</span>
+          <span class="stat-value primary" id="stat-total-customers">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><i class="fa-solid fa-coins"></i> 本月已收款</span>
+          <span class="stat-value success" id="stat-month-revenue">$0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><i class="fa-solid fa-clock-rotate-left"></i> 待收款金額</span>
+          <span class="stat-value warning" id="stat-pending-payments">$0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label"><i class="fa-solid fa-list-check"></i> 待辦/進行中行程</span>
+          <span class="stat-value" id="stat-pending-tasks">0</span>
+        </div>
+      </div>
+
+      <!-- Today's Schedule & Recent Payments -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title"><i class="fa-solid fa-calendar-day" style="color: var(--primary);"></i> 今日工作行程</h2>
+            <button class="btn btn-sm btn-primary" onclick="openWorkLogModal()">+ 新增行程</button>
+          </div>
+          <div id="today-worklogs-list" class="item-list">
+            <p style="color: var(--text-muted); text-align: center; padding: 20px;">今日尚無排定行程</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title"><i class="fa-solid fa-receipt" style="color: var(--success);"></i> 近期收費紀錄</h2>
+            <button class="btn btn-sm btn-success" onclick="openPaymentModal()">+ 新增收費</button>
+          </div>
+          <div id="recent-payments-list" class="item-list">
+            <p style="color: var(--text-muted); text-align: center; padding: 20px;">尚無收費紀錄</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: Customers -->
+    <section id="view-customers" class="content-view" style="display: none;">
+      <div class="filter-bar">
+        <input type="text" id="customer-search" class="search-input" placeholder="🔍 搜尋客戶姓名、電話、LINE ID..." oninput="debounce(loadCustomers, 300)()">
+        <button class="btn btn-primary" onclick="openCustomerModal()">
+          <i class="fa-solid fa-user-plus"></i> 新增客戶
+        </button>
+      </div>
+      <div id="customers-list" class="item-list">
+        <!-- Customer cards will be rendered here -->
+      </div>
+    </section>
+
+    <!-- SECTION: WorkLogs -->
+    <section id="view-worklogs" class="content-view" style="display: none;">
+      <div class="filter-bar">
+        <input type="text" id="worklog-search" class="search-input" placeholder="🔍 搜尋工作內容、客戶姓名..." oninput="debounce(loadWorkLogs, 300)()">
+        <select id="worklog-status-filter" class="select-input" onchange="loadWorkLogs()">
+          <option value="">全部狀態</option>
+          <option value="待處理">待處理</option>
+          <option value="進行中">進行中</option>
+          <option value="已完成">已完成</option>
+        </select>
+        <button class="btn btn-primary" onclick="openWorkLogModal()">
+          <i class="fa-solid fa-plus"></i> 新增工作行程
+        </button>
+      </div>
+      <div id="worklogs-list" class="item-list">
+        <!-- Work logs will be rendered here -->
+      </div>
+    </section>
+
+    <!-- SECTION: Quotations -->
+    <section id="view-quotations" class="content-view" style="display: none;">
+      <div class="filter-bar">
+        <input type="text" id="quotation-search" class="search-input" placeholder="🔍 搜尋報價單號、標題、客戶..." oninput="debounce(loadQuotations, 300)()">
+        <select id="quotation-status-filter" class="select-input" onchange="loadQuotations()">
+          <option value="">全部狀態</option>
+          <option value="草稿">草稿</option>
+          <option value="已發送">已發送</option>
+          <option value="客戶確認">客戶確認</option>
+          <option value="已結案">已結案</option>
+        </select>
+        <button class="btn btn-primary" onclick="openQuotationModal()">
+          <i class="fa-solid fa-file-circle-plus"></i> 建立報價單
+        </button>
+      </div>
+      <div id="quotations-list" class="item-list">
+        <!-- Quotations will be rendered here -->
+      </div>
+    </section>
+
+    <!-- SECTION: Payments -->
+    <section id="view-payments" class="content-view" style="display: none;">
+      <div class="filter-bar">
+        <input type="text" id="payment-search" class="search-input" placeholder="🔍 搜尋收費項目、客戶、備註..." oninput="debounce(loadPayments, 300)()">
+        <select id="payment-status-filter" class="select-input" onchange="loadPayments()">
+          <option value="">全部狀態</option>
+          <option value="已收款">已收款</option>
+          <option value="待收款">待收款</option>
+        </select>
+        <button class="btn btn-success" onclick="openPaymentModal()">
+          <i class="fa-solid fa-plus"></i> 新增收費紀錄
+        </button>
+      </div>
+      <div id="payments-list" class="item-list">
+        <!-- Payments will be rendered here -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Mobile Bottom Nav -->
+  <nav class="mobile-nav">
+    <a class="mobile-nav-item active" data-tab="dashboard">
+      <i class="fa-solid fa-chart-pie icon"></i>
+      <span>總覽</span>
+    </a>
+    <a class="mobile-nav-item" data-tab="customers">
+      <i class="fa-solid fa-users icon"></i>
+      <span>客戶</span>
+    </a>
+    <a class="mobile-nav-item" data-tab="worklogs">
+      <i class="fa-solid fa-calendar-check icon"></i>
+      <span>行程</span>
+    </a>
+    <a class="mobile-nav-item" data-tab="quotations">
+      <i class="fa-solid fa-file-invoice-dollar icon"></i>
+      <span>報價</span>
+    </a>
+    <a class="mobile-nav-item" data-tab="payments">
+      <i class="fa-solid fa-wallet icon"></i>
+      <span>收費</span>
+    </a>
+  </nav>
+</div>
+
+<!-- ==================== MODALS ==================== -->
+
+<!-- Customer Modal -->
+<div id="modal-customer" class="modal-backdrop" style="display: none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-customer-title">新增客戶</h3>
+      <button class="close-btn" onclick="closeModal('modal-customer')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="customer-id">
+      <div class="form-group">
+        <label>客戶姓名 / 公司名稱 *</label>
+        <input type="text" id="customer-name" class="form-input" placeholder="例: 王小明 或 某某工作室" required>
+      </div>
+      <div class="form-group">
+        <label>聯絡電話</label>
+        <input type="tel" id="customer-phone" class="form-input" placeholder="例: 0912-345-678">
+      </div>
+      <div class="form-group">
+        <label>LINE ID / 其他通訊</label>
+        <input type="text" id="customer-line" class="form-input" placeholder="例: line_id_123">
+      </div>
+      <div class="form-group">
+        <label>地址 / 施工地點</label>
+        <input type="text" id="customer-address" class="form-input" placeholder="例: 台北市大安區...">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="customer-email" class="form-input" placeholder="例: user@example.com">
+      </div>
+      <div class="form-group">
+        <label>備註事項</label>
+        <textarea id="customer-notes" class="form-textarea" rows="3" placeholder="重要備註或特殊要求..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-customer')">取消</button>
+      <button class="btn btn-primary" onclick="saveCustomer()">儲存客戶</button>
+    </div>
+  </div>
+</div>
+
+<!-- WorkLog Modal -->
+<div id="modal-worklog" class="modal-backdrop" style="display: none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-worklog-title">新增工作行程</h3>
+      <button class="close-btn" onclick="closeModal('modal-worklog')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="worklog-id">
+      <div class="form-group">
+        <label>選擇客戶</label>
+        <select id="worklog-customer" class="select-input">
+          <option value="">-- 無關聯客戶 / 內部行程 --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>工作標題 / 任務名稱 *</label>
+        <input type="text" id="worklog-title-input" class="form-input" placeholder="例: 到府檢修冷氣 / 會議簡報" required>
+      </div>
+      <div class="form-group">
+        <label>預定時間 *</label>
+        <input type="datetime-local" id="worklog-time" class="form-input" required>
+      </div>
+      <div class="form-group">
+        <label>工作地點</label>
+        <input type="text" id="worklog-location" class="form-input" placeholder="例: 客戶住址 或 線上會議">
+      </div>
+      <div class="form-group">
+        <label>狀態</label>
+        <select id="worklog-status" class="select-input">
+          <option value="待處理">待處理</option>
+          <option value="進行中">進行中</option>
+          <option value="已完成">已完成</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>詳細工作內容與紀錄</label>
+        <textarea id="worklog-details" class="form-textarea" rows="4" placeholder="填寫詳細步驟、檢驗結果或後續事項..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-worklog')">取消</button>
+      <button class="btn btn-primary" onclick="saveWorkLog()">儲存行程</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quotation Modal -->
+<div id="modal-quotation" class="modal-backdrop" style="display: none;">
+  <div class="modal" style="max-width: 720px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-quotation-title">建立報價單</h3>
+      <button class="close-btn" onclick="closeModal('modal-quotation')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="quotation-id">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>報價單號 (留空自動生成)</label>
+          <input type="text" id="quotation-number" class="form-input" placeholder="自動生成 (例: QT-20260904-001)">
+        </div>
+        <div class="form-group">
+          <label>關聯客戶 *</label>
+          <select id="quotation-customer" class="select-input" required>
+            <option value="">-- 請選擇客戶 --</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>報價單名稱 / 專案標題 *</label>
+        <input type="text" id="quotation-title-input" class="form-input" placeholder="例: 辦公室裝潢與設備報價" required>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>報價日期</label>
+          <input type="date" id="quotation-date" class="form-input">
+        </div>
+        <div class="form-group">
+          <label>狀態</label>
+          <select id="quotation-status" class="select-input">
+            <option value="草稿">草稿</option>
+            <option value="已發送">已發送</option>
+            <option value="客戶確認">客戶確認</option>
+            <option value="已結案">已結案</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Quotation Items Dynamic Table -->
+      <div class="form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <label>報價品項明細</label>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="addQuotationRow()">+ 增加品項</button>
+        </div>
+        <table class="items-table" id="quotation-items-table">
+          <thead>
+            <tr>
+              <th>項目名稱</th>
+              <th style="width: 70px;">數量</th>
+              <th style="width: 100px;">單價</th>
+              <th style="width: 100px;">小計</th>
+              <th style="width: 50px;"></th>
+            </tr>
+          </thead>
+          <tbody id="quotation-items-body">
+            <!-- Dynamic rows will be inserted here -->
+          </tbody>
+        </table>
+        <div style="text-align: right; font-size: 16px; font-weight: 700; margin-top: 10px;">
+          總計金額: <span id="quotation-total-display" style="color: var(--primary);">$0</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>條款或備註說明</label>
+        <textarea id="quotation-notes" class="form-textarea" rows="2" placeholder="如: 報價有效期限 14 天，確認後收取 30% 訂金..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-quotation')">取消</button>
+      <button class="btn btn-primary" onclick="saveQuotation()">儲存報價單</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quotation Print / Preview Modal -->
+<div id="modal-quotation-view" class="modal-backdrop" style="display: none;">
+  <div class="modal" style="max-width: 800px;">
+    <div class="modal-header no-print">
+      <h3 class="modal-title">報價單預覽</h3>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-sm btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> 列印 / 轉存 PDF</button>
+        <button class="close-btn" onclick="closeModal('modal-quotation-view')">&times;</button>
+      </div>
+    </div>
+    <div class="modal-body" id="quotation-preview-content" style="padding: 30px;">
+      <!-- Dynamic Quotation document generated by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- Payment Modal -->
+<div id="modal-payment" class="modal-backdrop" style="display: none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-payment-title">新增收費紀錄</h3>
+      <button class="close-btn" onclick="closeModal('modal-payment')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="payment-id">
+      <div class="form-group">
+        <label>關聯客戶 *</label>
+        <select id="payment-customer" class="select-input" required>
+          <option value="">-- 請選擇客戶 --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>收費項目說明 *</label>
+        <input type="text" id="payment-title-input" class="form-input" placeholder="例: 專案尾款 $5000 / 第一期款" required>
+      </div>
+      <div class="form-group">
+        <label>收費金額 ($TWD) *</label>
+        <input type="number" id="payment-amount" class="form-input" placeholder="5000" min="0" step="1" required>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>收款日期</label>
+          <input type="date" id="payment-date" class="form-input">
+        </div>
+        <div class="form-group">
+          <label>收款方式</label>
+          <select id="payment-method" class="select-input">
+            <option value="匯款">銀行匯款</option>
+            <option value="現金">現金</option>
+            <option value="LINE Pay">LINE Pay</option>
+            <option value="信用卡">信用卡</option>
+            <option value="支票">支票</option>
+          </select>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>收款狀態</label>
+          <select id="payment-status" class="select-input">
+            <option value="已收款">已收款</option>
+            <option value="待收款">待收款</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>發票 / 收據號碼</label>
+          <input type="text" id="payment-invoice" class="form-input" placeholder="例: AB-12345678">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>備註</label>
+        <textarea id="payment-notes" class="form-textarea" rows="2" placeholder="填寫收據註記或帳號後五碼..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-payment')">取消</button>
+      <button class="btn btn-success" onclick="savePayment()">儲存收費紀錄</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Payment Modal (One-click record xxx $5000) -->
+<div id="modal-quick-payment" class="modal-backdrop" style="display: none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">⚡ 快速記帳 (例: 收費 $5000)</h3>
+      <button class="close-btn" onclick="closeModal('modal-quick-payment')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>選擇客戶 *</label>
+        <select id="quick-payment-customer" class="select-input" required>
+          <option value="">-- 請選擇客戶 --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>收費項目說明</label>
+        <input type="text" id="quick-payment-title" class="form-input" value="服務收費" placeholder="例: 尾款 / 維修費">
+      </div>
+      <div class="form-group">
+        <label>收費金額 ($)</label>
+        <input type="number" id="quick-payment-amount" class="form-input" value="5000" min="0" step="1" required style="font-size: 20px; font-weight: 700; color: var(--success);">
+      </div>
+      <div class="form-group">
+        <label>快速選擇預設金額</label>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('quick-payment-amount').value = 1000">$1,000</button>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('quick-payment-amount').value = 3000">$3,000</button>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('quick-payment-amount').value = 5000">$5,000</button>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('quick-payment-amount').value = 10000">$10,000</button>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('quick-payment-amount').value = 20000">$20,000</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-quick-payment')">取消</button>
+      <button class="btn btn-success" onclick="saveQuickPayment()">立即入帳</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
