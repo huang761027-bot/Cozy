@@ -4,10 +4,6 @@
 let customersCache = [];
 let quotationsCache = [];
 
-// Speech Recognition instance
-let activeRecognition = null;
-let currentVoiceTranscript = '';
-
 // Service Worker for PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -87,15 +83,15 @@ function switchTab(tabName) {
     view.style.display = 'none';
   });
 
-  const titles = {
-    dashboard: '總覽管理',
-    customers: '客戶資料',
-    worklogs: '工作行程',
-    quotations: '報價管理',
-    payments: '收費紀錄'
+  const titleConfigs = {
+    dashboard: '<i class="fa-solid fa-chart-pie"></i> <span>總覽管理</span>',
+    customers: '<i class="fa-solid fa-users"></i> <span>客戶資料</span>',
+    worklogs: '<i class="fa-solid fa-calendar-check"></i> <span>工作行程</span>',
+    quotations: '<i class="fa-solid fa-file-invoice-dollar"></i> <span>報價管理</span>',
+    payments: '<i class="fa-solid fa-wallet"></i> <span>收費紀錄</span>'
   };
 
-  document.getElementById('page-title').innerText = titles[tabName] || '永倉管理';
+  document.getElementById('page-title').innerHTML = titleConfigs[tabName] || '<i class="fa-solid fa-layer-group"></i> <span>永倉管理</span>';
   const targetView = document.getElementById(`view-${tabName}`);
   if (targetView) targetView.style.display = 'block';
 
@@ -106,7 +102,7 @@ function switchTab(tabName) {
   if (tabName === 'payments') loadPayments();
 }
 
-// ==================== 🎙️ 語音輸入功能 (SPEECH RECOGNITION) ====================
+// ==================== 🎙️ 語音輸入功能 (SPEECH RECOGNITION - 新增資料時專用) ====================
 function getSpeechRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -120,7 +116,7 @@ function getSpeechRecognition() {
   return recognition;
 }
 
-// 欄位單獨語音輸入
+// 欄位單獨語音輸入 (客戶、行程、收費使用)
 function startFieldVoiceInput(targetInputId, micBtn) {
   const target = document.getElementById(targetInputId);
   if (!target) return;
@@ -153,108 +149,6 @@ function startFieldVoiceInput(targetInputId, micBtn) {
   recognition.start();
 }
 
-// 全域語音助理 Modal
-function openVoiceAssistantModal() {
-  currentVoiceTranscript = '';
-  document.getElementById('voice-result-box').innerText = '點擊上方麥克風圖示開始說話...';
-  document.getElementById('voice-status-text').innerText = '準備就緒，請點擊麥克風';
-  document.getElementById('voice-mic-circle').style.background = '#eff6ff';
-  document.getElementById('voice-mic-circle').style.color = '#2563eb';
-  openModal('modal-voice-assistant');
-}
-
-function closeVoiceAssistantModal() {
-  if (activeRecognition) {
-    activeRecognition.stop();
-  }
-  closeModal('modal-voice-assistant');
-}
-
-function toggleVoiceAssistantRecording() {
-  if (activeRecognition) {
-    activeRecognition.stop();
-    activeRecognition = null;
-    document.getElementById('voice-status-text').innerText = '錄音結束';
-    document.getElementById('voice-mic-circle').style.background = '#eff6ff';
-    document.getElementById('voice-mic-circle').style.color = '#2563eb';
-    return;
-  }
-
-  const recognition = getSpeechRecognition();
-  if (!recognition) return;
-
-  activeRecognition = recognition;
-  document.getElementById('voice-status-text').innerText = '🎙️ 聆聽中，請說話...';
-  document.getElementById('voice-mic-circle').style.background = '#fee2e2';
-  document.getElementById('voice-mic-circle').style.color = '#dc2626';
-
-  recognition.onresult = (event) => {
-    currentVoiceTranscript = event.results[0][0].transcript;
-    document.getElementById('voice-result-box').innerHTML = `<b>辨識結果：</b><br>${currentVoiceTranscript}`;
-  };
-
-  recognition.onerror = (event) => {
-    document.getElementById('voice-status-text').innerText = '辨識發生狀況：' + event.error;
-    document.getElementById('voice-mic-circle').style.background = '#eff6ff';
-    document.getElementById('voice-mic-circle').style.color = '#2563eb';
-    activeRecognition = null;
-  };
-
-  recognition.onend = () => {
-    document.getElementById('voice-status-text').innerText = '語音辨識完成！點擊下方「填入或執行」';
-    document.getElementById('voice-mic-circle').style.background = '#eff6ff';
-    document.getElementById('voice-mic-circle').style.color = '#2563eb';
-    activeRecognition = null;
-  };
-
-  recognition.start();
-}
-
-function applyVoiceResult() {
-  if (!currentVoiceTranscript) {
-    alert('尚未收到任何語音內容');
-    return;
-  }
-
-  const text = currentVoiceTranscript;
-  closeVoiceAssistantModal();
-
-  // 1. 判斷是否為收費/記帳: "收費" / "記帳" / "款" / "$5000" / "5000"
-  const amountMatch = text.match(/\d+/);
-  if (text.includes('收費') || text.includes('記帳') || text.includes('款') || amountMatch) {
-    openPaymentModal();
-    document.getElementById('payment-title-input').value = text;
-    if (amountMatch) {
-      document.getElementById('payment-amount').value = amountMatch[0];
-    }
-    matchAndSelectCustomer(text, 'payment-customer');
-    return;
-  }
-
-  // 2. 判斷是否為行程: "行程" / "現場" / "丈量" / "施工" / "會議"
-  if (text.includes('行程') || text.includes('現場') || text.includes('丈量') || text.includes('施工') || text.includes('會議') || text.includes('安裝')) {
-    openWorkLogModal();
-    document.getElementById('worklog-title-input').value = text;
-    matchAndSelectCustomer(text, 'worklog-customer');
-    return;
-  }
-
-  // 3. 預設開立客戶
-  openCustomerModal();
-  document.getElementById('customer-name').value = text;
-}
-
-function matchAndSelectCustomer(text, selectId) {
-  const select = document.getElementById(selectId);
-  if (!select) return;
-  for (const c of customersCache) {
-    if (text.includes(c.name)) {
-      select.value = c.id;
-      break;
-    }
-  }
-}
-
 // ==================== 1. 總覽管理 (DASHBOARD) ====================
 async function loadDashboard() {
   try {
@@ -275,6 +169,7 @@ async function loadDashboard() {
           <div class="list-item-top">
             <div class="list-item-info">
               <div class="list-item-title">
+                <i class="fa-solid fa-calendar-check" style="color: var(--primary);"></i>
                 <span>${item.title}</span>
                 <span class="badge ${getStatusBadgeClass(item.status)}">${item.status}</span>
               </div>
@@ -287,7 +182,7 @@ async function loadDashboard() {
         </div>
       `).join('');
     } else {
-      todayList.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">今日尚無排定行程</p>';
+      todayList.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">今日尚無排定行程</p>';
     }
 
     // Render recent payments
@@ -298,8 +193,9 @@ async function loadDashboard() {
           <div class="list-item-top">
             <div class="list-item-info">
               <div class="list-item-title">
+                <i class="fa-solid fa-receipt" style="color: var(--success);"></i>
                 <span>${p.title}</span>
-                <span style="color: var(--success); font-weight: 700;">+${formatCurrency(p.amount)}</span>
+                <span style="color: var(--success); font-weight: 800; margin-left: 4px;">+${formatCurrency(p.amount)}</span>
               </div>
               <div class="list-item-sub">
                 <span><i class="fa-regular fa-calendar"></i> ${formatDate(p.paymentDate)}</span>
@@ -311,7 +207,7 @@ async function loadDashboard() {
         </div>
       `).join('');
     } else {
-      recentList.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">尚無收費紀錄</p>';
+      recentList.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">尚無收費紀錄</p>';
     }
   } catch (err) {
     console.error('Error loading dashboard stats:', err);
@@ -340,17 +236,17 @@ async function loadCustomers() {
         <div class="list-item-top">
           <div class="list-item-info">
             <div class="list-item-title">
-              <i class="fa-solid fa-user" style="color: var(--primary);"></i>
-              <span style="font-size: 17px;">${c.name}</span>
+              <i class="fa-solid fa-user-tie" style="color: var(--primary);"></i>
+              <span style="font-size: 17px; font-weight: 800;">${c.name}</span>
               <span class="badge ${getCategoryBadgeClass(c.category)}">${c.category || '個人'}</span>
             </div>
             <div class="list-item-sub">
-              <span><i class="fa-solid fa-phone"></i> <b>${c.phone}</b></span>
-              ${c.lineId ? `<span><i class="fa-brands fa-line" style="color: #00c300;"></i> LINE: ${c.lineId}</span>` : ''}
-              ${c.address ? `<span><i class="fa-solid fa-location-dot"></i> ${c.address}</span>` : ''}
-              ${c.email ? `<span><i class="fa-solid fa-envelope"></i> ${c.email}</span>` : ''}
+              <span><i class="fa-solid fa-phone" style="color: var(--primary);"></i> <b>${c.phone}</b></span>
+              ${c.lineId ? `<span><i class="fa-brands fa-line" style="color: #00c300; font-size: 15px;"></i> LINE: ${c.lineId}</span>` : ''}
+              ${c.address ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${c.address}</span>` : ''}
+              ${c.email ? `<span><i class="fa-solid fa-envelope" style="color: #64748b;"></i> ${c.email}</span>` : ''}
             </div>
-            ${c.notes ? `<div style="font-size: 13px; color: #475569; margin-top: 4px; background: #f8fafc; border-left: 3px solid #cbd5e1; padding: 4px 8px; border-radius: 4px;">備註: ${c.notes}</div>` : ''}
+            ${c.notes ? `<div style="font-size: 13px; color: #475569; margin-top: 6px; background: #f8fafc; border-left: 3px solid #94a3b8; padding: 6px 10px; border-radius: 4px;"><i class="fa-regular fa-note-sticky"></i> 備註: ${c.notes}</div>` : ''}
           </div>
           <div style="display: flex; gap: 6px;">
             <button class="btn btn-sm btn-secondary" onclick="editCustomer(${c.id})" title="編輯資料"><i class="fa-solid fa-pen"></i></button>
@@ -364,7 +260,7 @@ async function loadCustomers() {
             <i class="fa-solid fa-file-invoice-dollar"></i> 產生報價單
           </button>
           <button class="btn btn-sm btn-action-pay" onclick="triggerCustomerAction(${c.id}, 'pay')">
-            <i class="fa-solid fa-coins"></i> 產生收費紀錄
+            <i class="fa-solid fa-wallet"></i> 產生收費紀錄
           </button>
           <button class="btn btn-sm btn-action-log" onclick="triggerCustomerAction(${c.id}, 'log')">
             <i class="fa-solid fa-calendar-plus"></i> 產生工作行程
@@ -425,7 +321,7 @@ function populateCustomerDropdowns() {
 
 function openCustomerModal(id = null) {
   document.getElementById('customer-id').value = id || '';
-  document.getElementById('modal-customer-title').innerText = id ? '編輯客戶資料' : '新增客戶資料';
+  document.getElementById('modal-customer-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯客戶資料' : '<i class="fa-solid fa-user-plus" style="color: var(--primary);"></i> 新增客戶資料';
   if (!id) {
     document.getElementById('customer-name').value = '';
     document.getElementById('customer-category').value = '個人';
@@ -449,7 +345,7 @@ async function editCustomer(id) {
   document.getElementById('customer-address').value = customer.address || '';
   document.getElementById('customer-email').value = customer.email || '';
   document.getElementById('customer-notes').value = customer.notes || '';
-  document.getElementById('modal-customer-title').innerText = '編輯客戶資料';
+  document.getElementById('modal-customer-title').innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯客戶資料';
   openModal('modal-customer');
 }
 
@@ -525,6 +421,7 @@ async function loadWorkLogs() {
         <div class="list-item-top">
           <div class="list-item-info">
             <div class="list-item-title">
+              <i class="fa-solid fa-calendar-check" style="color: var(--primary);"></i>
               <span>${w.title}</span>
               <span class="badge ${getStatusBadgeClass(w.status)}">${w.status}</span>
               ${w.customerCategory ? `<span class="badge ${getCategoryBadgeClass(w.customerCategory)}">${w.customerCategory}</span>` : ''}
@@ -532,12 +429,12 @@ async function loadWorkLogs() {
             <div class="list-item-sub">
               <span><i class="fa-solid fa-user"></i> <b>${w.customerName}</b> ${w.customerPhone ? '(' + w.customerPhone + ')' : ''}</span>
               <span><i class="fa-regular fa-clock"></i> 預定: ${formatDateTime(w.scheduledAt)}</span>
-              ${w.location ? `<span><i class="fa-solid fa-location-dot"></i> ${w.location}</span>` : ''}
+              ${w.location ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${w.location}</span>` : ''}
             </div>
-            ${w.details ? `<div style="font-size: 13px; color: #334155; margin-top: 6px; white-space: pre-line; background: #f8fafc; padding: 8px 12px; border-radius: 6px;">${w.details}</div>` : ''}
+            ${w.details ? `<div style="font-size: 13.5px; color: #334155; margin-top: 8px; white-space: pre-line; background: #f8fafc; border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 4px;">${w.details}</div>` : ''}
           </div>
           <div style="display: flex; gap: 6px; align-items: center;">
-            <select class="select-input" style="padding: 4px 8px; font-size: 12px;" onchange="changeWorkLogStatus(${w.id}, this.value)">
+            <select class="select-input" style="padding: 4px 8px; font-size: 12.5px; font-weight: 600;" onchange="changeWorkLogStatus(${w.id}, this.value)">
               <option value="待處理" ${w.status === '待處理' ? 'selected' : ''}>待處理</option>
               <option value="進行中" ${w.status === '進行中' ? 'selected' : ''}>進行中</option>
               <option value="已完成" ${w.status === '已完成' ? 'selected' : ''}>已完成</option>
@@ -572,7 +469,7 @@ async function changeWorkLogStatus(id, newStatus) {
 
 function openWorkLogModal(id = null, preSelectCustomerId = null) {
   document.getElementById('worklog-id').value = id || '';
-  document.getElementById('modal-worklog-title').innerText = id ? '編輯工作行程' : '排定工作行程';
+  document.getElementById('modal-worklog-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯工作行程' : '<i class="fa-solid fa-calendar-plus" style="color: var(--primary);"></i> 排定工作行程';
   populateCustomerDropdowns();
 
   const customerSelect = document.getElementById('worklog-customer');
@@ -605,7 +502,7 @@ async function editWorkLog(id) {
   const w = await res.json();
 
   document.getElementById('worklog-id').value = w.id;
-  document.getElementById('modal-worklog-title').innerText = '編輯工作行程';
+  document.getElementById('modal-worklog-title').innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯工作行程';
   populateCustomerDropdowns();
 
   const customerSelect = document.getElementById('worklog-customer');
@@ -703,8 +600,8 @@ async function loadQuotations() {
 
       html += `
         <div class="quotation-group-box">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div style="font-weight: 700; font-size: 15px; color: var(--text-main);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div style="font-weight: 800; font-size: 16px; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
               <i class="fa-solid fa-user-tie" style="color: var(--primary);"></i>
               <span>${latest.customerName}</span>
               ${latest.customerCategory ? `<span class="badge ${getCategoryBadgeClass(latest.customerCategory)}">${latest.customerCategory}</span>` : ''}
@@ -714,16 +611,16 @@ async function loadQuotations() {
           </div>
 
           <!-- Latest Quotation Card -->
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
-              <div style="font-weight: 700; font-size: 16px; color: var(--primary);">
-                [${latest.quotationNumber}] ${latest.title}
-                <span style="font-size: 11px; background: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">最新版本</span>
+              <div style="font-weight: 800; font-size: 16px; color: var(--primary);">
+                <i class="fa-solid fa-file-invoice"></i> [${latest.quotationNumber}] ${latest.title}
+                <span style="font-size: 11px; background: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: 700;">最新版本</span>
               </div>
-              <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-                <span>報價日期: ${formatDate(latest.issueDate)}</span> |
-                <span style="font-size: 15px; font-weight: 700; color: var(--text-main);">總額: ${formatCurrency(latest.totalAmount)}</span>
-                ${latest.hasPayment ? '<span class="badge badge-success" style="margin-left: 6px;"><i class="fa-solid fa-check"></i> 已轉入收費</span>' : ''}
+              <div style="font-size: 13.5px; color: var(--text-muted); margin-top: 5px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <span><i class="fa-regular fa-calendar"></i> 報價日期: ${formatDate(latest.issueDate)}</span>
+                <span><i class="fa-solid fa-calculator"></i> 總額: <b style="font-size: 16px; color: var(--text-main);">${formatCurrency(latest.totalAmount)}</b></span>
+                ${latest.hasPayment ? '<span class="badge badge-success" style="font-size: 11.5px;"><i class="fa-solid fa-check-double"></i> 已轉入收費</span>' : ''}
               </div>
             </div>
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
@@ -741,11 +638,11 @@ async function loadQuotations() {
           <!-- Collapsible Older History -->
           ${older.length > 0 ? `
             <button type="button" class="history-toggle-btn" onclick="toggleQuotationHistory('hist-${cId}', this)">
-              <i class="fa-solid fa-chevron-right"></i> 歷史報價紀錄 (${older.length} 筆)
+              <i class="fa-solid fa-clock-rotate-left"></i> 展開歷史報價紀錄 (${older.length} 筆)
             </button>
             <div id="hist-${cId}" class="history-container">
               ${older.map(oldQ => `
-                <div style="background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
+                <div style="background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 13.5px;">
                   <div>
                     <span style="color: #64748b; font-family: monospace;">[${oldQ.quotationNumber}]</span>
                     <b>${oldQ.title}</b>
@@ -777,10 +674,10 @@ function toggleQuotationHistory(containerId, btn) {
   const isOpen = container.classList.contains('open');
   if (isOpen) {
     container.classList.remove('open');
-    btn.innerHTML = `<i class="fa-solid fa-chevron-right"></i> 展開歷史報價紀錄`;
+    btn.innerHTML = `<i class="fa-solid fa-clock-rotate-left"></i> 展開歷史報價紀錄`;
   } else {
     container.classList.add('open');
-    btn.innerHTML = `<i class="fa-solid fa-chevron-down"></i> 收合歷史報價紀錄`;
+    btn.innerHTML = `<i class="fa-solid fa-chevron-up"></i> 收合歷史報價紀錄`;
   }
 }
 
@@ -792,7 +689,7 @@ async function convertQuotationToPayment(quotationId, title, amount) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: `報價單結算款項: ${title}`,
+        title: `報價單結算: ${title}`,
         status: '待收款',
         paymentMethod: '匯款'
       })
@@ -812,7 +709,7 @@ async function convertQuotationToPayment(quotationId, title, amount) {
 
 function openQuotationModal(id = null, preSelectCustomerId = null) {
   document.getElementById('quotation-id').value = id || '';
-  document.getElementById('modal-quotation-title').innerText = id ? '編輯報價單' : '建立報價單';
+  document.getElementById('modal-quotation-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯報價單' : '<i class="fa-solid fa-file-circle-plus" style="color: var(--primary);"></i> 建立報價單';
   document.getElementById('quotation-number').value = '';
   document.getElementById('quotation-title-input').value = '';
   document.getElementById('quotation-date').value = new Date().toISOString().slice(0, 10);
@@ -845,13 +742,11 @@ function addQuotationRow(name = '', qty = 1, price = 0) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td>
-      <div class="input-mic-group">
-        <input type="text" class="form-input item-name" style="width:100%" value="${name}" placeholder="品項或服務說明" required>
-      </div>
+      <input type="text" class="form-input item-name" style="width:100%" value="${name}" placeholder="品項或服務說明" required>
     </td>
     <td><input type="number" class="form-input item-qty" style="width:100%" value="${qty}" min="1" step="1" oninput="calculateQuotationTotal()"></td>
     <td><input type="number" class="form-input item-price" style="width:100%" value="${price}" min="0" step="1" oninput="calculateQuotationTotal()"></td>
-    <td class="item-subtotal" style="font-weight:600; vertical-align: middle;">$0</td>
+    <td class="item-subtotal" style="font-weight:700; vertical-align: middle;">$0</td>
     <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); calculateQuotationTotal();">&times;</button></td>
   `;
   tbody.appendChild(tr);
@@ -943,7 +838,7 @@ async function editQuotation(id) {
   const q = await res.json();
 
   document.getElementById('quotation-id').value = q.id;
-  document.getElementById('modal-quotation-title').innerText = '編輯報價單';
+  document.getElementById('modal-quotation-title').innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯報價單';
   document.getElementById('quotation-number').value = q.quotationNumber || '';
   populateCustomerDropdowns();
   
@@ -979,7 +874,7 @@ async function viewQuotation(id) {
   preview.innerHTML = `
     <div style="border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start;">
       <div>
-        <h1 style="color: #2563eb; font-size: 26px; margin-bottom: 4px; font-weight: 800;">永 倉 管 理 - 報 價 單</h1>
+        <h1 style="color: #2563eb; font-size: 26px; margin-bottom: 4px; font-weight: 800;"><i class="fa-solid fa-file-invoice"></i> 永 倉 管 理 - 報 價 單</h1>
         <div style="font-size: 14px; color: #64748b;">單號：<b>${q.quotationNumber}</b></div>
       </div>
       <div style="text-align: right; font-size: 14px;">
@@ -989,7 +884,7 @@ async function viewQuotation(id) {
     </div>
 
     <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
-      <h3 style="font-size: 15px; margin-bottom: 8px; color: #1e293b;">客戶資訊</h3>
+      <h3 style="font-size: 15px; margin-bottom: 8px; color: #1e293b;"><i class="fa-solid fa-user-tie" style="color: var(--primary);"></i> 客戶資訊</h3>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
         <div>客戶姓名：<b>${q.customer ? q.customer.name : '未指定'}</b> ${q.customer && q.customer.category ? `(${q.customer.category})` : ''}</div>
         <div>聯絡電話：<b>${q.customer && q.customer.phone ? q.customer.phone : '無'}</b></div>
@@ -1013,14 +908,14 @@ async function viewQuotation(id) {
             <td><b>${item.itemName}</b></td>
             <td style="text-align: center;">${item.quantity}</td>
             <td style="text-align: right;">${formatCurrency(item.unitPrice)}</td>
-            <td style="text-align: right; font-weight: 600;">${formatCurrency(item.subtotal)}</td>
+            <td style="text-align: right; font-weight: 700;">${formatCurrency(item.subtotal)}</td>
           </tr>
         `).join('')}
       </tbody>
       <tfoot>
-        <tr style="background: #eff6ff; font-weight: 700; font-size: 16px;">
+        <tr style="background: #eff6ff; font-weight: 800; font-size: 16px;">
           <td colspan="3" style="text-align: right;">報價總金額 (TWD)：</td>
-          <td style="text-align: right; color: #2563eb;">${formatCurrency(q.totalAmount)}</td>
+          <td style="text-align: right; color: #2563eb; font-size: 18px;">${formatCurrency(q.totalAmount)}</td>
         </tr>
       </tfoot>
     </table>
@@ -1047,7 +942,7 @@ async function deleteQuotation(id) {
   if (res.ok) loadQuotations();
 }
 
-// ==================== 5. 收費紀錄 (PAYMENTS - Optional Customer / Locked when from Customer List) ====================
+// ==================== 5. 收費紀錄 (PAYMENTS) ====================
 async function loadPayments() {
   const search = document.getElementById('payment-search').value;
   const status = document.getElementById('payment-status-filter').value;
@@ -1066,18 +961,19 @@ async function loadPayments() {
         <div class="list-item-top">
           <div class="list-item-info">
             <div class="list-item-title">
-              <span>${p.title}</span>
-              <span style="color: var(--success); font-size: 18px; font-weight: 700;">+${formatCurrency(p.amount)}</span>
+              <i class="fa-solid fa-wallet" style="color: var(--success);"></i>
+              <span style="font-size: 16.5px; font-weight: 800;">${p.title}</span>
+              <span style="color: var(--success); font-size: 18px; font-weight: 800; margin-left: 4px;">+${formatCurrency(p.amount)}</span>
               <span class="badge ${p.status === '已收款' ? 'badge-success' : 'badge-warning'}">${p.status}</span>
-              ${p.quotationNumber ? `<span class="badge badge-info" style="font-size: 11px;"><i class="fa-solid fa-file-invoice"></i> 來自報價單 ${p.quotationNumber}</span>` : (!p.customerId ? '<span class="badge badge-gray" style="font-size: 11px;">散客 / 現場購買</span>' : '<span class="badge badge-gray" style="font-size: 11px;">單一產品收費</span>')}
+              ${p.quotationNumber ? `<span class="badge badge-info" style="font-size: 11px;"><i class="fa-solid fa-file-invoice"></i> 來自報價單 ${p.quotationNumber}</span>` : (!p.customerId ? '<span class="badge badge-gray" style="font-size: 11px;"><i class="fa-solid fa-store"></i> 散客 / 現場購買</span>' : '<span class="badge badge-gray" style="font-size: 11px;">單一產品收費</span>')}
             </div>
             <div class="list-item-sub">
               <span><i class="fa-solid fa-user"></i> <b>${p.customerName}</b></span>
-              <span><i class="fa-solid fa-money-bill-transfer"></i> ${p.paymentMethod}</span>
+              <span><i class="fa-solid fa-money-bill-transfer" style="color: #64748b;"></i> ${p.paymentMethod}</span>
               <span><i class="fa-regular fa-calendar"></i> ${formatDate(p.paymentDate)}</span>
               ${p.invoiceNumber ? `<span><i class="fa-solid fa-receipt"></i> 發票: ${p.invoiceNumber}</span>` : ''}
             </div>
-            ${p.notes ? `<div style="font-size: 12px; color: #64748b; margin-top: 4px;">備註: ${p.notes}</div>` : ''}
+            ${p.notes ? `<div style="font-size: 13px; color: #64748b; margin-top: 4px;"><i class="fa-regular fa-comment-dots"></i> 備註: ${p.notes}</div>` : ''}
           </div>
           <div style="display: flex; gap: 6px;">
             <button class="btn btn-sm btn-secondary" onclick="editPayment(${p.id})"><i class="fa-solid fa-pen"></i></button>
@@ -1093,7 +989,7 @@ async function loadPayments() {
 
 function openPaymentModal(id = null, preSelectCustomerId = null) {
   document.getElementById('payment-id').value = id || '';
-  document.getElementById('modal-payment-title').innerText = id ? '編輯收費紀錄' : '新增收費紀錄 (購買單一產品/收款)';
+  document.getElementById('modal-payment-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--success);"></i> 編輯收費紀錄' : '<i class="fa-solid fa-plus" style="color: var(--success);"></i> 新增收費紀錄 (購買單一產品/收款)';
   populateCustomerDropdowns();
 
   const customerSelect = document.getElementById('payment-customer');
@@ -1102,14 +998,12 @@ function openPaymentModal(id = null, preSelectCustomerId = null) {
   const optionalHint = document.getElementById('payment-customer-optional-hint');
 
   if (preSelectCustomerId) {
-    // 由客戶列表點選產生收費 -> 客戶名稱鎖定不可編輯
     customerSelect.value = preSelectCustomerId;
     customerSelect.disabled = true;
     lockedInput.value = preSelectCustomerId;
     if (lockedHint) lockedHint.style.display = 'inline';
     if (optionalHint) optionalHint.style.display = 'none';
   } else {
-    // 單獨新增收費 -> 客戶可選填或為散客
     customerSelect.disabled = false;
     lockedInput.value = '';
     if (lockedHint) lockedHint.style.display = 'none';
@@ -1135,7 +1029,7 @@ async function editPayment(id) {
   const p = await res.json();
 
   document.getElementById('payment-id').value = p.id;
-  document.getElementById('modal-payment-title').innerText = '編輯收費紀錄';
+  document.getElementById('modal-payment-title').innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: var(--success);"></i> 編輯收費紀錄';
   populateCustomerDropdowns();
 
   const customerSelect = document.getElementById('payment-customer');
