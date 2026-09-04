@@ -41,11 +41,12 @@ namespace Cozy.Controllers
                 search = search.Trim();
                 query = query.Where(q => q.QuotationNumber.Contains(search) || 
                                          q.Title.Contains(search) ||
-                                         (q.Customer != null && q.Customer.Name.Contains(search)));
+                                         (q.Customer != null && (q.Customer.Name.Contains(search) || q.Customer.Phone.Contains(search))));
             }
 
             var list = await query
                 .OrderByDescending(q => q.IssueDate)
+                .ThenByDescending(q => q.Id)
                 .Select(q => new
                 {
                     q.Id,
@@ -53,12 +54,15 @@ namespace Cozy.Controllers
                     q.CustomerId,
                     CustomerName = q.Customer != null ? q.Customer.Name : "",
                     CustomerPhone = q.Customer != null ? q.Customer.Phone : "",
+                    CustomerCategory = q.Customer != null ? q.Customer.Category : "",
                     q.Title,
                     q.IssueDate,
                     q.ExpiryDate,
                     q.TotalAmount,
                     q.Status,
-                    q.CreatedAt
+                    q.Notes,
+                    q.CreatedAt,
+                    HasPayment = _context.Payments.Any(p => p.QuotationId == q.Id)
                 })
                 .ToListAsync();
 
@@ -111,6 +115,35 @@ namespace Cozy.Controllers
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetQuotation), new { id = quotation.Id }, quotation);
+        }
+
+        // POST: api/Quotations/5/to-payment (Convert quotation final amount to payment record)
+        [HttpPost("{id}/to-payment")]
+        public async Task<ActionResult<Payment>> ConvertToPayment(int id, [FromBody] ConvertPaymentDto? dto)
+        {
+            var quotation = await _context.Quotations.Include(q => q.Customer).FirstOrDefaultAsync(q => q.Id == id);
+            if (quotation == null)
+            {
+                return NotFound(new { message = "找不到此報價單" });
+            }
+
+            var payment = new Payment
+            {
+                CustomerId = quotation.CustomerId,
+                QuotationId = quotation.Id,
+                Title = !string.IsNullOrWhiteSpace(dto?.Title) ? dto.Title : $"報價單結算: {quotation.Title} ({quotation.QuotationNumber})",
+                Amount = quotation.TotalAmount,
+                PaymentDate = dto?.PaymentDate ?? DateTime.UtcNow,
+                PaymentMethod = !string.IsNullOrWhiteSpace(dto?.PaymentMethod) ? dto.PaymentMethod : "匯款",
+                Status = !string.IsNullOrWhiteSpace(dto?.Status) ? dto.Status : "待收款",
+                Notes = $"由報價單 {quotation.QuotationNumber} 轉入收費紀錄",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Payments.Add(payment);
+            await _context.SaveChangesAsync();
+
+            return Ok(payment);
         }
 
         // PUT: api/Quotations/5
@@ -170,5 +203,13 @@ namespace Cozy.Controllers
 
             return Ok(new { message = "報價單已刪除" });
         }
+    }
+
+    public class ConvertPaymentDto
+    {
+        public string? Title { get; set; }
+        public DateTime? PaymentDate { get; set; }
+        public string? PaymentMethod { get; set; }
+        public string? Status { get; set; }
     }
 }

@@ -17,18 +17,35 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     });
 
-// 2. Configure MySQL Database with Pomelo
+// 2. Intelligent Database Configuration (MySQL on Railway / SQLite for smooth local development)
+string? railwayUrl = Environment.GetEnvironmentVariable("MYSQL_URL") 
+    ?? Environment.GetEnvironmentVariable("DATABASE_URL")
+    ?? Environment.GetEnvironmentVariable("MYSQLHOST");
+
 string connectionString = DbConnectionStringHelper.GetMySQLConnectionString(builder.Configuration);
+
+// Check if we should use MySQL (Railway environment OR non-localhost custom string)
+bool isLocalhostDefault = connectionString.Contains("Server=localhost", StringComparison.OrdinalIgnoreCase);
+bool useMySql = !string.IsNullOrWhiteSpace(railwayUrl) || (!isLocalhostDefault);
+
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    // Use MySQL with auto server version detection or fallback version 8.0
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString), mySqlOptions =>
+    if (useMySql)
     {
-        mySqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(10),
-            errorNumbersToAdd: null);
-    });
+        var serverVersion = new MySqlServerVersion(new Version(8, 0, 36));
+        options.UseMySql(connectionString, serverVersion, mySqlOptions =>
+        {
+            mySqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorNumbersToAdd: null);
+        });
+    }
+    else
+    {
+        // Local fallback: SQLite (Runs immediately without installing MySQL locally!)
+        options.UseSqlite("Data Source=cozy_local.db");
+    }
 });
 
 // 3. CORS configuration
@@ -48,15 +65,15 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
     {
-        Title = "Cozy 業務管理系統 API",
+        Title = "永倉管理系統 API",
         Version = "v1",
-        Description = "客戶資料、工作行程、報價單與收費管理 API"
+        Description = "客戶資料、工作行程、報價管理與收費紀錄 API"
     });
 });
 
 var app = builder.Build();
 
-// 5. Automatic Database Initialization (EnsureCreated for Railway / MySQL)
+// 5. Automatic Database Initialization (EnsureCreated for MySQL / SQLite)
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -64,25 +81,22 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var db = services.GetRequiredService<AppDbContext>();
-        logger.LogInformation("Checking and creating MySQL database and tables if not exist...");
+        logger.LogInformation("Ensuring database and tables exist (Provider: {Provider})...", db.Database.ProviderName);
         db.Database.EnsureCreated();
-        logger.LogInformation("Database initialized successfully.");
+        logger.LogInformation("Database tables initialized successfully!");
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "An error occurred while migrating/creating the database.");
+        logger.LogWarning("Notice during DB setup: {Message}", ex.Message);
     }
 }
 
 // 6. HTTP request pipeline configuration
-if (app.Environment.IsDevelopment() || true) // Enable Swagger on Railway as well for easy testing
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Cozy API v1");
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "永倉管理 API v1");
+});
 
 app.UseCors("AllowAll");
 

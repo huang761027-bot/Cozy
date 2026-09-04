@@ -51,7 +51,8 @@ namespace Cozy.Controllers
                 search = search.Trim();
                 query = query.Where(w => w.Title.Contains(search) || 
                                          (w.Details != null && w.Details.Contains(search)) ||
-                                         (w.Customer != null && w.Customer.Name.Contains(search)));
+                                         (w.Location != null && w.Location.Contains(search)) ||
+                                         (w.Customer != null && (w.Customer.Name.Contains(search) || w.Customer.Phone.Contains(search))));
             }
 
             var list = await query
@@ -62,6 +63,7 @@ namespace Cozy.Controllers
                     w.CustomerId,
                     CustomerName = w.Customer != null ? w.Customer.Name : "未指定客戶",
                     CustomerPhone = w.Customer != null ? w.Customer.Phone : null,
+                    CustomerCategory = w.Customer != null ? w.Customer.Category : null,
                     w.Title,
                     w.ScheduledAt,
                     w.Status,
@@ -106,6 +108,25 @@ namespace Cozy.Controllers
             return CreatedAtAction(nameof(GetWorkLog), new { id = workLog.Id }, workLog);
         }
 
+        // PATCH: api/WorkLogs/5/status
+        [HttpPatch("{id}/status")]
+        public async Task<IActionResult> UpdateStatus(int id, [FromBody] StatusUpdateDto dto)
+        {
+            var existing = await _context.WorkLogs.FindAsync(id);
+            if (existing == null)
+            {
+                return NotFound(new { message = "找不到此工作記錄" });
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Status))
+            {
+                existing.Status = dto.Status;
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(existing);
+        }
+
         // PUT: api/WorkLogs/5
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateWorkLog(int id, [FromBody] WorkLog workLog)
@@ -148,5 +169,10 @@ namespace Cozy.Controllers
 
             return Ok(new { message = "工作記錄已刪除" });
         }
+    }
+
+    public class StatusUpdateDto
+    {
+        public string Status { get; set; } = string.Empty;
     }
 }

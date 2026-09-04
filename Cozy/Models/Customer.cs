@@ -10,12 +10,16 @@ namespace Cozy.Models
         [Key]
         public int Id { get; set; }
 
-        [Required]
+        [Required(ErrorMessage = "客戶姓名為必填項目")]
         [MaxLength(100)]
         public string Name { get; set; } = string.Empty;
 
+        [Required(ErrorMessage = "電話為必填項目")]
         [MaxLength(50)]
-        public string? Phone { get; set; }
+        public string Phone { get; set; } = string.Empty;
+
+        [MaxLength(50)]
+        public string Category { get; set; } = "個人"; // 設計師, 公司, 個人, 專案, 其他
 
         [MaxLength(100)]
         public string? LineId { get; set; }

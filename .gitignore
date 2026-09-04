@@ -1,0 +1,22 @@
+## Visual Studio
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+## SQLite local test databases
+*.db
+*.db-shm
+*.db-wal
+
+## Packages
+*.nupkg
+project.lock.json
+project.assets.json

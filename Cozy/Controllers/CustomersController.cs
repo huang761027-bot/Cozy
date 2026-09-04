@@ -21,16 +21,22 @@ namespace Cozy.Controllers
 
         // GET: api/Customers
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Customer>>> GetCustomers([FromQuery] string? search)
+        public async Task<ActionResult<IEnumerable<Customer>>> GetCustomers([FromQuery] string? search, [FromQuery] string? category)
         {
             var query = _context.Customers.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                query = query.Where(c => c.Category == category);
+            }
 
             if (!string.IsNullOrWhiteSpace(search))
             {
                 search = search.Trim();
                 query = query.Where(c => c.Name.Contains(search) || 
-                                         (c.Phone != null && c.Phone.Contains(search)) || 
-                                         (c.LineId != null && c.LineId.Contains(search)));
+                                         c.Phone.Contains(search) || 
+                                         (c.LineId != null && c.LineId.Contains(search)) ||
+                                         (c.Address != null && c.Address.Contains(search)));
             }
 
             return await query.OrderByDescending(c => c.Id).ToListAsync();
@@ -41,9 +47,9 @@ namespace Cozy.Controllers
         public async Task<ActionResult<object>> GetCustomer(int id)
         {
             var customer = await _context.Customers
-                .Include(c => c.WorkLogs.OrderByDescending(w => w.ScheduledAt).Take(10))
-                .Include(c => c.Quotations.OrderByDescending(q => q.IssueDate).Take(10))
-                .Include(c => c.Payments.OrderByDescending(p => p.PaymentDate).Take(10))
+                .Include(c => c.WorkLogs.OrderByDescending(w => w.ScheduledAt))
+                .Include(c => c.Quotations.OrderByDescending(q => q.IssueDate))
+                .Include(c => c.Payments.OrderByDescending(p => p.PaymentDate))
                 .FirstOrDefaultAsync(c => c.Id == id);
 
             if (customer == null)
@@ -62,6 +68,15 @@ namespace Cozy.Controllers
             {
                 return BadRequest(new { message = "客戶姓名為必填項目" });
             }
+            if (string.IsNullOrWhiteSpace(customer.Phone))
+            {
+                return BadRequest(new { message = "客戶電話為必填項目" });
+            }
+
+            if (string.IsNullOrWhiteSpace(customer.Category))
+            {
+                customer.Category = "個人";
+            }
 
             customer.CreatedAt = System.DateTime.UtcNow;
             _context.Customers.Add(customer);
@@ -79,6 +94,15 @@ namespace Cozy.Controllers
                 return BadRequest(new { message = "ID 不符" });
             }
 
+            if (string.IsNullOrWhiteSpace(customer.Name))
+            {
+                return BadRequest(new { message = "客戶姓名為必填項目" });
+            }
+            if (string.IsNullOrWhiteSpace(customer.Phone))
+            {
+                return BadRequest(new { message = "客戶電話為必填項目" });
+            }
+
             var existing = await _context.Customers.FindAsync(id);
             if (existing == null)
             {
@@ -87,6 +111,7 @@ namespace Cozy.Controllers
 
             existing.Name = customer.Name;
             existing.Phone = customer.Phone;
+            existing.Category = string.IsNullOrWhiteSpace(customer.Category) ? "個人" : customer.Category;
             existing.LineId = customer.LineId;
             existing.Address = customer.Address;
             existing.Email = customer.Email;
