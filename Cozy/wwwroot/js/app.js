@@ -187,17 +187,19 @@ async function loadDashboard() {
     const todayList = document.getElementById('today-worklogs-list');
     if (data.todayWorkLogs && data.todayWorkLogs.length > 0) {
       todayList.innerHTML = data.todayWorkLogs.map(item => `
-        <div class="list-item-card">
+        <div class="list-item-card ${item.isPriority ? 'is-priority' : ''}">
           <div class="list-item-top">
             <div class="list-item-info">
               <div class="list-item-title">
                 <i class="fa-solid fa-calendar-check" style="color: var(--primary);"></i>
+                ${item.isPriority ? '<span class="badge badge-priority"><i class="fa-solid fa-star"></i> 優先 (*)</span>' : ''}
                 <span>${item.title}</span>
                 <span class="badge ${getStatusBadgeClass(item.status)}">${item.status}</span>
               </div>
               <div class="list-item-sub">
-                <span><i class="fa-regular fa-clock"></i> ${formatDateTime(item.scheduledAt)}</span>
+                <span><i class="fa-regular fa-clock"></i> 預定: ${formatDateTime(item.scheduledAt)}</span>
                 <span><i class="fa-solid fa-user"></i> ${item.customerName}</span>
+                ${item.statusUpdatedAt ? `<span class="status-time-tag"><i class="fa-solid fa-clock-rotate-left"></i> 狀態更新: ${formatDateTime(item.statusUpdatedAt)}</span>` : ''}
               </div>
             </div>
           </div>
@@ -444,11 +446,12 @@ async function loadWorkLogs() {
     }
 
     listEl.innerHTML = data.map(w => `
-      <div class="list-item-card">
+      <div class="list-item-card ${w.isPriority ? 'is-priority' : ''}">
         <div class="list-item-top">
           <div class="list-item-info">
             <div class="list-item-title">
               <i class="fa-solid fa-calendar-check" style="color: var(--primary);"></i>
+              ${w.isPriority ? '<span class="badge badge-priority"><i class="fa-solid fa-star"></i> 優先處理 (*)</span>' : ''}
               <span>${w.title}</span>
               <span class="badge ${getStatusBadgeClass(w.status)}">${w.status}</span>
               ${w.customerCategory ? `<span class="badge ${getCategoryBadgeClass(w.customerCategory)}">${w.customerCategory}</span>` : ''}
@@ -457,6 +460,7 @@ async function loadWorkLogs() {
               <span><i class="fa-solid fa-user"></i> <b>${w.customerName}</b> ${w.customerPhone ? '(' + w.customerPhone + ')' : ''}</span>
               <span><i class="fa-regular fa-clock"></i> 預定: ${formatDateTime(w.scheduledAt)}</span>
               ${w.location ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${w.location}</span>` : ''}
+              ${w.statusUpdatedAt ? `<span class="status-time-tag"><i class="fa-solid fa-clock-rotate-left"></i> 狀態更新: ${formatDateTime(w.statusUpdatedAt)}</span>` : ''}
             </div>
             ${w.details ? `<div style="font-size: 13.5px; color: #334155; margin-top: 8px; white-space: pre-line; background: #f8fafc; border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 4px;">${w.details}</div>` : ''}
           </div>
@@ -518,6 +522,7 @@ function openWorkLogModal(id = null, preSelectCustomerId = null) {
     document.getElementById('worklog-time').value = nowIso;
     document.getElementById('worklog-location').value = '';
     document.getElementById('worklog-status').value = '待處理';
+    document.getElementById('worklog-is-priority').checked = false;
     document.getElementById('worklog-details').value = '';
   }
   openModal('modal-worklog');
@@ -542,6 +547,7 @@ async function editWorkLog(id) {
   document.getElementById('worklog-time').value = w.scheduledAt ? w.scheduledAt.substring(0, 16) : '';
   document.getElementById('worklog-location').value = w.location || '';
   document.getElementById('worklog-status').value = w.status || '待處理';
+  document.getElementById('worklog-is-priority').checked = !!w.isPriority;
   document.getElementById('worklog-details').value = w.details || '';
 
   openModal('modal-worklog');
@@ -564,7 +570,8 @@ async function saveWorkLog() {
     title,
     scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : new Date().toISOString(),
     location: document.getElementById('worklog-location').value.trim(),
-    status: document.getElementById('worklog-status').value,
+    status: document.getElementById('worklog-status').value || '待處理',
+    isPriority: document.getElementById('worklog-is-priority').checked,
     details: document.getElementById('worklog-details').value.trim()
   };
 

@@ -23,6 +23,10 @@ namespace Cozy.Models
         [MaxLength(50)]
         public string Status { get; set; } = "待處理"; // 待處理, 進行中, 已完成, 已取消
 
+        public DateTime? StatusUpdatedAt { get; set; }
+
+        public bool IsPriority { get; set; } = false; // 是否優先處理 (*)
+
         public string? Details { get; set; }
 
         public string? Location { get; set; }

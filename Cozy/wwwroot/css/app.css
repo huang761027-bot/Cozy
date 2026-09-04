@@ -1029,3 +1029,51 @@ body {
 .invoice-attachment-tag:hover {
   background: #dbeafe;
 }
+
+/* Priority WorkLog Styling (*) */
+.list-item-card.is-priority {
+  border-left: 4px solid #f59e0b;
+  background: #fffdf5;
+}
+
+.badge-priority {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #b45309;
+  border: 1px solid #fcd34d;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.priority-checkbox-group {
+  background: #fefce8;
+  border: 1px dashed #fde047;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+}
+
+.priority-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  color: #92400e;
+}
+
+.priority-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #f59e0b;
+}
+
+.status-time-tag {
+  font-size: 12px;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

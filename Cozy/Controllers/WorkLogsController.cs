@@ -56,7 +56,8 @@ namespace Cozy.Controllers
             }
 
             var list = await query
-                .OrderByDescending(w => w.ScheduledAt)
+                .OrderByDescending(w => w.IsPriority)
+                .ThenByDescending(w => w.ScheduledAt)
                 .Select(w => new
                 {
                     w.Id,
@@ -67,6 +68,8 @@ namespace Cozy.Controllers
                     w.Title,
                     w.ScheduledAt,
                     w.Status,
+                    w.StatusUpdatedAt,
+                    w.IsPriority,
                     w.Details,
                     w.Location,
                     w.CreatedAt
@@ -108,7 +111,14 @@ namespace Cozy.Controllers
                     workLog.ScheduledAt = DateTime.UtcNow;
                 }
 
+                // 預設狀態為待處理
+                if (string.IsNullOrWhiteSpace(workLog.Status))
+                {
+                    workLog.Status = "待處理";
+                }
+                workLog.StatusUpdatedAt = DateTime.UtcNow;
                 workLog.CreatedAt = DateTime.UtcNow;
+
                 _context.WorkLogs.Add(workLog);
                 await _context.SaveChangesAsync();
 
@@ -135,6 +145,7 @@ namespace Cozy.Controllers
                 if (!string.IsNullOrWhiteSpace(dto.Status))
                 {
                     existing.Status = dto.Status;
+                    existing.StatusUpdatedAt = DateTime.UtcNow;
                     await _context.SaveChangesAsync();
                 }
 
@@ -168,10 +179,16 @@ namespace Cozy.Controllers
                     return NotFound(new { message = "找不到此工作記錄" });
                 }
 
+                if (existing.Status != workLog.Status)
+                {
+                    existing.StatusUpdatedAt = DateTime.UtcNow;
+                }
+
                 existing.CustomerId = workLog.CustomerId;
                 existing.Title = workLog.Title;
                 existing.ScheduledAt = workLog.ScheduledAt != default ? workLog.ScheduledAt : existing.ScheduledAt;
-                existing.Status = workLog.Status;
+                existing.Status = string.IsNullOrWhiteSpace(workLog.Status) ? "待處理" : workLog.Status;
+                existing.IsPriority = workLog.IsPriority;
                 existing.Details = workLog.Details;
                 existing.Location = workLog.Location;
 

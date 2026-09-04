@@ -30,13 +30,16 @@ namespace Cozy.Controllers
             var todayWorkLogs = await _context.WorkLogs
                 .Include(w => w.Customer)
                 .Where(w => w.ScheduledAt.Date == today)
-                .OrderBy(w => w.ScheduledAt)
+                .OrderByDescending(w => w.IsPriority)
+                .ThenBy(w => w.ScheduledAt)
                 .Select(w => new
                 {
                     w.Id,
                     w.Title,
                     w.ScheduledAt,
                     w.Status,
+                    w.StatusUpdatedAt,
+                    w.IsPriority,
                     CustomerName = w.Customer != null ? w.Customer.Name : "未指定客戶"
                 })
                 .ToListAsync();
