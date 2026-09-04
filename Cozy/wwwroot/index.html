@@ -428,26 +428,20 @@
         </div>
       </div>
 
-      <!-- Items Table -->
+      <!-- Items Container (Card List) -->
       <div class="form-group">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <label><b>報價品項明細</b></label>
           <button type="button" class="btn btn-sm btn-secondary" onclick="addQuotationRow()"><i class="fa-solid fa-plus"></i> 增加品項</button>
         </div>
-        <table class="items-table" id="quotation-items-table">
-          <thead>
-            <tr>
-              <th>品項 / 服務說明</th>
-              <th style="width: 70px;">數量</th>
-              <th style="width: 110px;">單價</th>
-              <th style="width: 110px;">小計</th>
-              <th style="width: 40px;"></th>
-            </tr>
-          </thead>
-          <tbody id="quotation-items-body"></tbody>
-        </table>
-        <div style="text-align: right; font-size: 17px; font-weight: 700; margin-top: 10px;">
-          報價總額: <span id="quotation-total-display" style="color: var(--primary); font-size: 22px;">$0</span>
+        
+        <div id="quotation-items-container" class="quotation-items-container">
+          <!-- Dynamic quotation item cards will be added here -->
+        </div>
+
+        <div class="quotation-total-banner">
+          <span><i class="fa-solid fa-calculator"></i> 報價總計金額：</span>
+          <span id="quotation-total-display">$0</span>
         </div>
       </div>
 

@@ -729,8 +729,8 @@ function openQuotationModal(id = null, preSelectCustomerId = null) {
     if (lockedHint) lockedHint.style.display = 'none';
   }
 
-  const tbody = document.getElementById('quotation-items-body');
-  tbody.innerHTML = '';
+  const container = document.getElementById('quotation-items-container');
+  container.innerHTML = '';
   addQuotationRow('標準服務項目', 1, 5000);
   calculateQuotationTotal();
 
@@ -738,34 +738,71 @@ function openQuotationModal(id = null, preSelectCustomerId = null) {
 }
 
 function addQuotationRow(name = '', qty = 1, price = 0) {
-  const tbody = document.getElementById('quotation-items-body');
-  const tr = document.createElement('tr');
-  tr.innerHTML = `
-    <td>
-      <input type="text" class="form-input item-name" style="width:100%" value="${name}" placeholder="品項或服務說明" required>
-    </td>
-    <td><input type="number" class="form-input item-qty" style="width:100%" value="${qty}" min="1" step="1" oninput="calculateQuotationTotal()"></td>
-    <td><input type="number" class="form-input item-price" style="width:100%" value="${price}" min="0" step="1" oninput="calculateQuotationTotal()"></td>
-    <td class="item-subtotal" style="font-weight:700; vertical-align: middle;">$0</td>
-    <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); calculateQuotationTotal();">&times;</button></td>
+  const container = document.getElementById('quotation-items-container');
+  const card = document.createElement('div');
+  card.className = 'quotation-item-card';
+  card.innerHTML = `
+    <div class="item-card-header">
+      <span class="item-card-num"><i class="fa-solid fa-cube" style="color: var(--primary);"></i> 品項</span>
+      <button type="button" class="btn-delete-item" onclick="this.closest('.quotation-item-card').remove(); updateQuotationItemIndices(); calculateQuotationTotal();" title="刪除此品項">
+        <i class="fa-solid fa-trash-can"></i> 刪除
+      </button>
+    </div>
+    <div>
+      <label class="item-card-label">品項 / 服務說明 <span style="color:red">*</span></label>
+      <input type="text" class="form-input item-name" value="${name ? name.replace(/"/g, '&quot;') : ''}" placeholder="例: 客廳天花板平釘木作工程 / 設備安裝" required>
+    </div>
+    <div class="item-card-grid">
+      <div>
+        <label class="item-card-label">數量</label>
+        <input type="number" class="form-input item-qty" value="${qty}" min="1" step="1" oninput="calculateQuotationTotal()">
+      </div>
+      <div>
+        <label class="item-card-label">單價 (NT$)</label>
+        <input type="number" class="form-input item-price" value="${price}" min="0" step="1" oninput="calculateQuotationTotal()">
+      </div>
+      <div class="item-subtotal-col">
+        <label class="item-card-label">小計</label>
+        <div class="item-subtotal-box">
+          <span class="item-subtotal">$0</span>
+        </div>
+      </div>
+    </div>
   `;
-  tbody.appendChild(tr);
+  container.appendChild(card);
+  updateQuotationItemIndices();
   calculateQuotationTotal();
 }
 
+function updateQuotationItemIndices() {
+  const cards = document.querySelectorAll('#quotation-items-container .quotation-item-card');
+  cards.forEach((c, idx) => {
+    const numEl = c.querySelector('.item-card-num');
+    if (numEl) {
+      numEl.innerHTML = `<i class="fa-solid fa-cube" style="color: var(--primary);"></i> 品項 #${idx + 1}`;
+    }
+  });
+}
+
 function calculateQuotationTotal() {
-  const rows = document.querySelectorAll('#quotation-items-body tr');
+  const cards = document.querySelectorAll('#quotation-items-container .quotation-item-card');
   let grandTotal = 0;
 
-  rows.forEach(row => {
-    const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
-    const price = parseFloat(row.querySelector('.item-price').value) || 0;
+  cards.forEach(card => {
+    const qty = parseFloat(card.querySelector('.item-qty').value) || 0;
+    const price = parseFloat(card.querySelector('.item-price').value) || 0;
     const subtotal = qty * price;
-    row.querySelector('.item-subtotal').innerText = formatCurrency(subtotal);
+    const subtotalEl = card.querySelector('.item-subtotal');
+    if (subtotalEl) {
+      subtotalEl.innerText = formatCurrency(subtotal);
+    }
     grandTotal += subtotal;
   });
 
-  document.getElementById('quotation-total-display').innerText = formatCurrency(grandTotal);
+  const totalDisplay = document.getElementById('quotation-total-display');
+  if (totalDisplay) {
+    totalDisplay.innerText = formatCurrency(grandTotal);
+  }
 }
 
 async function saveQuotation() {
@@ -784,11 +821,11 @@ async function saveQuotation() {
   }
 
   const items = [];
-  const rows = document.querySelectorAll('#quotation-items-body tr');
-  rows.forEach(row => {
-    const name = row.querySelector('.item-name').value.trim();
-    const qty = parseFloat(row.querySelector('.item-qty').value) || 1;
-    const price = parseFloat(row.querySelector('.item-price').value) || 0;
+  const cards = document.querySelectorAll('#quotation-items-container .quotation-item-card');
+  cards.forEach(card => {
+    const name = card.querySelector('.item-name').value.trim();
+    const qty = parseFloat(card.querySelector('.item-qty').value) || 1;
+    const price = parseFloat(card.querySelector('.item-price').value) || 0;
     if (name) {
       items.push({
         itemName: name,
@@ -853,8 +890,8 @@ async function editQuotation(id) {
   document.getElementById('quotation-status').value = q.status || '草稿';
   document.getElementById('quotation-notes').value = q.notes || '';
 
-  const tbody = document.getElementById('quotation-items-body');
-  tbody.innerHTML = '';
+  const container = document.getElementById('quotation-items-container');
+  container.innerHTML = '';
   if (q.items && q.items.length > 0) {
     q.items.forEach(i => addQuotationRow(i.itemName, i.quantity, i.unitPrice));
   } else {
