@@ -136,17 +136,22 @@ using (var scope = app.Services.CreateScope())
                     `Id` int NOT NULL AUTO_INCREMENT,
                     `ProjectId` int NOT NULL,
                     `FileName` varchar(255) NOT NULL,
-                    `OriginalFileName` varchar(255) NOT NULL,
-                    `ContentType` varchar(100) NOT NULL,
-                    `FileSize` bigint NOT NULL,
+                    `StoredFileName` varchar(255) NOT NULL,
                     `FilePath` varchar(500) NOT NULL,
+                    `FileType` varchar(50) NOT NULL,
+                    `FileSizeBytes` bigint NOT NULL,
+                    `Description` varchar(255) NULL,
                     `UploadedAt` datetime(6) NOT NULL,
                     PRIMARY KEY (`Id`),
                     KEY `IX_ProjectFiles_ProjectId` (`ProjectId`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             ");
 
-            // Safe column additions
+            // Safe column additions / fixes
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `ProjectFiles` ADD COLUMN `StoredFileName` varchar(255) NOT NULL DEFAULT '';"); } catch {}
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `ProjectFiles` ADD COLUMN `FileType` varchar(50) NOT NULL DEFAULT '';"); } catch {}
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `ProjectFiles` ADD COLUMN `FileSizeBytes` bigint NOT NULL DEFAULT 0;"); } catch {}
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `ProjectFiles` ADD COLUMN `Description` varchar(255) NULL;"); } catch {}
             try { db.Database.ExecuteSqlRaw("ALTER TABLE `WorkLogs` ADD COLUMN `ProjectId` int NULL;"); } catch {}
             try { db.Database.ExecuteSqlRaw("ALTER TABLE `WorkLogs` ADD COLUMN `IsPriority` tinyint(1) NOT NULL DEFAULT 0;"); } catch {}
             try { db.Database.ExecuteSqlRaw("ALTER TABLE `WorkLogs` ADD COLUMN `StatusUpdatedAt` datetime(6) NULL;"); } catch {}

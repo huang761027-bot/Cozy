@@ -276,6 +276,7 @@ async function loadCustomers() {
   const category = document.getElementById('customer-category-filter').value;
   try {
     const res = await fetch(`/api/customers?search=${encodeURIComponent(search || '')}&category=${encodeURIComponent(category || '')}`);
+    if (!res.ok) return;
     const data = await res.json();
     customersCache = data;
 
@@ -552,6 +553,7 @@ async function loadProjects() {
 
   try {
     const res = await fetch(`/api/projects?search=${encodeURIComponent(search || '')}&customerId=${encodeURIComponent(customerId || '')}&status=${encodeURIComponent(status || '')}`);
+    if (!res.ok) return;
     const data = await res.json();
     projectsCache = data;
 
@@ -911,6 +913,7 @@ async function loadWorkLogs() {
   const status = document.getElementById('worklog-status-filter').value;
   try {
     const res = await fetch(`/api/worklogs?search=${encodeURIComponent(search || '')}&status=${encodeURIComponent(status || '')}`);
+    if (!res.ok) return;
     const data = await res.json();
     const listEl = document.getElementById('worklogs-list');
 
@@ -1104,6 +1107,7 @@ async function loadQuotations() {
   const status = document.getElementById('quotation-status-filter').value;
   try {
     const res = await fetch(`/api/quotations?search=${encodeURIComponent(search || '')}&status=${encodeURIComponent(status || '')}`);
+    if (!res.ok) return;
     const data = await res.json();
     quotationsCache = data;
     const listEl = document.getElementById('quotations-list');
@@ -1535,6 +1539,7 @@ async function loadPayments() {
   const status = document.getElementById('payment-status-filter').value;
   try {
     const res = await fetch(`/api/payments?search=${encodeURIComponent(search || '')}&status=${encodeURIComponent(status || '')}`);
+    if (!res.ok) return;
     const data = await res.json();
     const listEl = document.getElementById('payments-list');
 
