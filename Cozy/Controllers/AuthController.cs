@@ -61,64 +61,60 @@ namespace Cozy.Controllers
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(req.Credential))
+                {
+                    return BadRequest(new { message = "🚫 安全防護：必須透過 Google 官方登入彈窗進行密碼與身分驗證，禁止手動輸入信箱！" });
+                }
+
                 string email = "";
                 string name = "";
                 string picture = "";
 
-                if (!string.IsNullOrWhiteSpace(req.Credential))
+                // Verify ID Token with Google official tokeninfo API
+                try
                 {
-                    // Verify ID Token with Google official tokeninfo API
-                    try
+                    var response = await _httpClient.GetAsync($"https://oauth2.googleapis.com/tokeninfo?id_token={req.Credential}");
+                    if (response.IsSuccessStatusCode)
                     {
-                        var response = await _httpClient.GetAsync($"https://oauth2.googleapis.com/tokeninfo?id_token={req.Credential}");
-                        if (response.IsSuccessStatusCode)
+                        var tokenInfo = await response.Content.ReadFromJsonAsync<GoogleTokenInfo>();
+                        if (tokenInfo != null && !string.IsNullOrWhiteSpace(tokenInfo.email))
                         {
-                            var tokenInfo = await response.Content.ReadFromJsonAsync<GoogleTokenInfo>();
-                            if (tokenInfo != null && !string.IsNullOrWhiteSpace(tokenInfo.email))
-                            {
-                                email = tokenInfo.email.Trim().ToLowerInvariant();
-                                name = tokenInfo.name ?? req.Name ?? email.Split('@')[0];
-                                picture = tokenInfo.picture ?? req.Picture ?? "";
-                            }
-                        }
-                    }
-                    catch { }
-
-                    // Fallback to decode JWT payload if direct network lookup is skipped
-                    if (string.IsNullOrWhiteSpace(email))
-                    {
-                        var parts = req.Credential.Split('.');
-                        if (parts.Length >= 2)
-                        {
-                            string payloadBase64 = parts[1].PadRight(parts[1].Length + (4 - parts[1].Length % 4) % 4, '=')
-                                .Replace('-', '+').Replace('_', '/');
-                            byte[] bytes = Convert.FromBase64String(payloadBase64);
-                            var jsonDoc = JsonDocument.Parse(bytes);
-                            if (jsonDoc.RootElement.TryGetProperty("email", out var emailProp))
-                            {
-                                email = emailProp.GetString()?.Trim().ToLowerInvariant() ?? "";
-                            }
-                            if (jsonDoc.RootElement.TryGetProperty("name", out var nameProp))
-                            {
-                                name = nameProp.GetString() ?? "";
-                            }
-                            if (jsonDoc.RootElement.TryGetProperty("picture", out var picProp))
-                            {
-                                picture = picProp.GetString() ?? "";
-                            }
+                            email = tokenInfo.email.Trim().ToLowerInvariant();
+                            name = tokenInfo.name ?? req.Name ?? email.Split('@')[0];
+                            picture = tokenInfo.picture ?? req.Picture ?? "";
                         }
                     }
                 }
-                else if (!string.IsNullOrWhiteSpace(req.Email))
+                catch { }
+
+                // Fallback to decode JWT payload if direct network lookup has minor delay
+                if (string.IsNullOrWhiteSpace(email))
                 {
-                    email = req.Email.Trim().ToLowerInvariant();
-                    name = req.Name ?? email.Split('@')[0];
-                    picture = req.Picture ?? "";
+                    var parts = req.Credential.Split('.');
+                    if (parts.Length >= 2)
+                    {
+                        string payloadBase64 = parts[1].PadRight(parts[1].Length + (4 - parts[1].Length % 4) % 4, '=')
+                            .Replace('-', '+').Replace('_', '/');
+                        byte[] bytes = Convert.FromBase64String(payloadBase64);
+                        var jsonDoc = JsonDocument.Parse(bytes);
+                        if (jsonDoc.RootElement.TryGetProperty("email", out var emailProp))
+                        {
+                            email = emailProp.GetString()?.Trim().ToLowerInvariant() ?? "";
+                        }
+                        if (jsonDoc.RootElement.TryGetProperty("name", out var nameProp))
+                        {
+                            name = nameProp.GetString() ?? "";
+                        }
+                        if (jsonDoc.RootElement.TryGetProperty("picture", out var picProp))
+                        {
+                            picture = picProp.GetString() ?? "";
+                        }
+                    }
                 }
 
                 if (string.IsNullOrWhiteSpace(email))
                 {
-                    return BadRequest(new { message = "無法讀取或驗證 Google 帳號 Email" });
+                    return BadRequest(new { message = "無法驗證 Google 官方憑證（Token 無效或過期），請重新嘗試登入。" });
                 }
 
                 string rootAdminEmail = (Environment.GetEnvironmentVariable("SUPER_ADMIN_EMAIL") 

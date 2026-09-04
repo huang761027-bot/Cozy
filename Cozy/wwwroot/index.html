@@ -137,29 +137,20 @@
     </div>
 
     <!-- Official Google GSI Button Container -->
-    <div class="google-btn-wrapper" style="width: 100%; display: flex; justify-content: center; margin-bottom: 8px; min-height: 44px;">
-      <div id="google-login-btn-container"></div>
-    </div>
-
-    <!-- Alternative / Direct Fallback Login -->
-    <div class="login-divider">
-      <span>或直接輸入授權信箱</span>
-    </div>
-
-    <form onsubmit="handleDirectEmailLogin(event)" style="width: 100%;">
-      <div class="form-group" style="margin-bottom: 14px;">
-        <div style="position: relative; width: 100%;">
-          <i class="fa-solid fa-envelope" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 15px;"></i>
-          <input type="email" id="login-direct-email" class="form-input" placeholder="例: huang761027@gmail.com" value="huang761027@gmail.com" required style="width: 100%; box-sizing: border-box; padding: 12px 14px 12px 40px; font-size: 14.5px; border-radius: 12px; border: 1.5px solid #cbd5e1; outline: none; transition: border-color 0.2s;">
+    <div class="google-btn-wrapper" style="width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 12px 0 8px 0; min-height: 48px;">
+      <div id="google-login-btn-container" style="display: flex; justify-content: center; width: 100%;"></div>
+      
+      <!-- Prompt when Client ID is pending setup -->
+      <div id="google-setup-prompt" style="display: none; width: 100%; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 14px; border-radius: 12px; font-size: 13px; line-height: 1.5; text-align: left; margin-top: 8px; box-sizing: border-box;">
+        <div style="font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-triangle-exclamation"></i> 尚未綁定 Google Client ID
         </div>
+        請在 Railway 專案設定 <code>GOOGLE_CLIENT_ID</code> 環境變數，即可啟用 Google 官方彈窗登入。
       </div>
-      <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 13px; font-size: 15.5px; font-weight: 700; border-radius: 12px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; color: white; cursor: pointer; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35); display: flex; align-items: center; gap: 8px;">
-        <i class="fa-brands fa-google"></i> 安全驗證登入
-      </button>
-    </form>
+    </div>
 
     <div class="login-footer-hint">
-      <i class="fa-solid fa-lock" style="color: #2563eb;"></i> 系統受授權白名單保護，未授權帳號無法存取
+      <i class="fa-solid fa-shield-halved" style="color: #2563eb;"></i> 系統受嚴格授權白名單保護，未授權帳號無法存取
     </div>
   </div>
 </div>

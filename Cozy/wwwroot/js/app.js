@@ -2134,30 +2134,49 @@ function applyAuthState(isLoggedIn) {
 }
 
 async function initGoogleLoginBtn() {
+  const btnContainer = document.getElementById('google-login-btn-container');
+  const promptContainer = document.getElementById('google-setup-prompt');
+
   try {
     const res = await fetch('/api/auth/config');
     if (!res.ok) return;
     const config = await res.json();
-    if (config.clientId && window.google && window.google.accounts) {
-      window.google.accounts.id.initialize({
-        client_id: config.clientId,
-        callback: handleGoogleCredentialResponse,
-        auto_select: false
-      });
-      const btnContainer = document.getElementById('google-login-btn-container');
-      if (btnContainer) {
-        btnContainer.innerHTML = '';
-        window.google.accounts.id.renderButton(btnContainer, {
-          theme: 'outline',
-          size: 'large',
-          type: 'standard',
-          shape: 'pill',
-          text: 'signin_with',
-          logo_alignment: 'left',
-          width: 320
-        });
-      }
+
+    if (!config.clientId) {
+      if (promptContainer) promptContainer.style.display = 'block';
+      if (btnContainer) btnContainer.style.display = 'none';
+      return;
     }
+
+    if (promptContainer) promptContainer.style.display = 'none';
+    if (btnContainer) btnContainer.style.display = 'flex';
+
+    // Wait for Google Identity Services script to be ready if needed
+    const tryRender = (retries = 0) => {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        window.google.accounts.id.initialize({
+          client_id: config.clientId,
+          callback: handleGoogleCredentialResponse,
+          auto_select: false
+        });
+        if (btnContainer) {
+          btnContainer.innerHTML = '';
+          window.google.accounts.id.renderButton(btnContainer, {
+            theme: 'outline',
+            size: 'large',
+            type: 'standard',
+            shape: 'pill',
+            text: 'signin_with',
+            logo_alignment: 'left',
+            width: 320
+          });
+        }
+      } else if (retries < 10) {
+        setTimeout(() => tryRender(retries + 1), 300);
+      }
+    };
+
+    tryRender();
   } catch (err) {
     console.error('Init Google GSI failed:', err);
   }
@@ -2195,59 +2214,6 @@ async function handleGoogleCredentialResponse(response) {
     if (errorAlert && errorText) {
       errorText.textContent = '登入連線失敗：' + err;
       errorAlert.style.display = 'flex';
-    }
-  }
-}
-
-async function handleDirectEmailLogin(e) {
-  e.preventDefault();
-  const emailInput = document.getElementById('login-direct-email');
-  const email = emailInput ? emailInput.value.trim() : '';
-  if (!email) return;
-
-  const errorAlert = document.getElementById('login-error-alert');
-  const errorText = document.getElementById('login-error-text');
-  if (errorAlert) errorAlert.style.display = 'none';
-
-  const btn = document.getElementById('login-submit-btn');
-  const originalBtnText = btn ? btn.innerHTML : '';
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 驗證中...';
-  }
-
-  try {
-    const res = await fetch('/api/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email })
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      currentUser = data.user || data;
-      applyAuthState(true);
-      loadDashboard();
-      loadCustomers();
-      loadProjects();
-    } else {
-      const msg = await parseErrorMessage(res, '此 Google 信箱未在授權白名單內或已被停用！');
-      if (errorAlert && errorText) {
-        errorText.textContent = msg;
-        errorAlert.style.display = 'flex';
-      } else {
-        alert(msg);
-      }
-    }
-  } catch (err) {
-    if (errorAlert && errorText) {
-      errorText.textContent = '驗證登入連線失敗：' + err;
-      errorAlert.style.display = 'flex';
-    }
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = originalBtnText;
     }
   }
 }
