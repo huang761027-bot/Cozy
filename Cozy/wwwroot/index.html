@@ -28,13 +28,16 @@
       width: 100vw;
       height: 100vh;
       background: radial-gradient(circle at 50% 25%, #1e293b 0%, #0b1120 100%);
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       z-index: 999999;
       padding: 20px;
       box-sizing: border-box;
       margin: 0;
+    }
+    .login-overlay-backdrop.hidden-overlay {
+      display: none !important;
     }
     .login-card {
       background: #ffffff;
@@ -150,7 +153,7 @@
           <input type="email" id="login-direct-email" class="form-input" placeholder="例: huang761027@gmail.com" value="huang761027@gmail.com" required style="width: 100%; box-sizing: border-box; padding: 12px 14px 12px 40px; font-size: 14.5px; border-radius: 12px; border: 1.5px solid #cbd5e1; outline: none; transition: border-color 0.2s;">
         </div>
       </div>
-      <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 13px; font-size: 15.5px; font-weight: 700; border-radius: 12px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; color: white; cursor: pointer; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35); display: flex; align-items: center; gap: 8px;">
+      <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 13px; font-size: 15.5px; font-weight: 700; border-radius: 12px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; color: white; cursor: pointer; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35); display: flex; align-items: center; gap: 8px;">
         <i class="fa-brands fa-google"></i> 安全驗證登入
       </button>
     </form>

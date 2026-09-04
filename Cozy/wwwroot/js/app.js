@@ -2058,7 +2058,8 @@ async function checkAuth() {
   try {
     const res = await fetch('/api/auth/me');
     if (res.ok) {
-      currentUser = await res.json();
+      const data = await res.json();
+      currentUser = data.user || data;
       applyAuthState(true);
       return true;
     } else {
@@ -2082,7 +2083,10 @@ function applyAuthState(isLoggedIn) {
   const mobileNavItemUsers = document.getElementById('mobile-nav-item-users');
 
   if (isLoggedIn && currentUser) {
-    if (loginOverlay) loginOverlay.style.display = 'none';
+    if (loginOverlay) {
+      loginOverlay.style.display = 'none';
+      loginOverlay.classList.add('hidden-overlay');
+    }
     if (mainContainer) mainContainer.style.display = 'flex';
     if (userProfileWidget) {
       userProfileWidget.style.display = 'flex';
@@ -2119,7 +2123,10 @@ function applyAuthState(isLoggedIn) {
       if (mobileNavItemUsers) mobileNavItemUsers.style.display = 'none';
     }
   } else {
-    if (loginOverlay) loginOverlay.style.display = 'flex';
+    if (loginOverlay) {
+      loginOverlay.classList.remove('hidden-overlay');
+      loginOverlay.style.display = 'flex';
+    }
     if (mainContainer) mainContainer.style.display = 'none';
     if (userProfileWidget) userProfileWidget.style.display = 'none';
     initGoogleLoginBtn();
@@ -2169,7 +2176,8 @@ async function handleGoogleCredentialResponse(response) {
     });
 
     if (res.ok) {
-      currentUser = await res.json();
+      const data = await res.json();
+      currentUser = data.user || data;
       applyAuthState(true);
       loadDashboard();
       loadCustomers();
@@ -2201,6 +2209,13 @@ async function handleDirectEmailLogin(e) {
   const errorText = document.getElementById('login-error-text');
   if (errorAlert) errorAlert.style.display = 'none';
 
+  const btn = document.getElementById('login-submit-btn');
+  const originalBtnText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 驗證中...';
+  }
+
   try {
     const res = await fetch('/api/auth/google', {
       method: 'POST',
@@ -2209,7 +2224,8 @@ async function handleDirectEmailLogin(e) {
     });
 
     if (res.ok) {
-      currentUser = await res.json();
+      const data = await res.json();
+      currentUser = data.user || data;
       applyAuthState(true);
       loadDashboard();
       loadCustomers();
@@ -2227,6 +2243,11 @@ async function handleDirectEmailLogin(e) {
     if (errorAlert && errorText) {
       errorText.textContent = '驗證登入連線失敗：' + err;
       errorAlert.style.display = 'flex';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalBtnText;
     }
   }
 }
