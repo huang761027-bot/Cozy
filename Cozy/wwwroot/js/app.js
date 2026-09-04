@@ -16,6 +16,17 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Global fetch interceptor to catch 401 Unauthorized
+const originalFetch = window.fetch;
+window.fetch = async (...args) => {
+  const response = await originalFetch(...args);
+  if (response.status === 401 && typeof args[0] === 'string' && !args[0].includes('/api/auth/')) {
+    currentUser = null;
+    applyAuthState(false);
+  }
+  return response;
+};
+
 // Utility: Debounce for search inputs
 function debounce(func, wait) {
   let timeout;

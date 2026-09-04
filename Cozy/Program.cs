@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Cozy.Data;
+using Cozy.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -113,9 +114,12 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthorization();
 
+// 8. Global Security Authentication Middleware (全面鎖定所有 API 後端存取)
+app.UseMiddleware<CozyAuthMiddleware>();
+
 app.MapControllers();
 
-// 8. Fallback to index.html for SPA frontend routing
+// 9. Fallback to index.html for SPA frontend routing
 app.MapFallbackToFile("index.html");
 
 // 9. Railway Port Binding (Railway injects PORT environment variable)
