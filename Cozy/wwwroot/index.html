@@ -9,13 +9,103 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="永倉管理">
-  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/app.css?v=20260904_3">
   <!-- FontAwesome 6 Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Barcode & QR Code Scanner Libraries for Taiwan Electronic Invoices -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <!-- Google Identity Services (GSI) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <style>
+    /* Critical Login Styles (確保立即載入，不受瀏覽器舊快取影響) */
+    .login-overlay-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(circle at 50% 25%, #1e293b 0%, #0b1120 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99999;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .login-card {
+      background: #ffffff;
+      border-radius: 24px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+      width: 100%;
+      max-width: 420px;
+      padding: 40px 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+    .login-brand-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      color: #ffffff;
+      box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);
+      margin-bottom: 20px;
+    }
+    .login-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 6px;
+      letter-spacing: -0.5px;
+    }
+    .login-subtitle {
+      font-size: 13.5px;
+      color: #64748b;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .login-divider {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      text-align: center;
+      margin: 20px 0;
+    }
+    .login-divider::before, .login-divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .login-divider span {
+      padding: 0 12px;
+      font-size: 12.5px;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+    .login-footer-hint {
+      margin-top: 24px;
+      font-size: 12px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      line-height: 1.4;
+      background: #f8fafc;
+      padding: 8px 14px;
+      border-radius: 30px;
+      border: 1px solid #e2e8f0;
+    }
+  </style>
 </head>
 <body>
 
@@ -26,35 +116,43 @@
       <i class="fa-solid fa-layer-group"></i>
     </div>
     <h2 class="login-title">永倉管理系統</h2>
-    <p class="login-subtitle">最高安全防護 ｜ 請使用授權之 Google 帳號登入</p>
+    <p class="login-subtitle">
+      <span style="display: inline-block; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 20px; border: 1px solid #bfdbfe; margin-bottom: 6px;">
+        <i class="fa-solid fa-shield-halved"></i> 企業內部安全防護系統
+      </span><br>
+      請使用授權之 Google 帳號驗證登入
+    </p>
 
     <!-- Error / Access Denied Alert -->
-    <div id="login-error-alert" class="login-alert-danger" style="display: none;">
-      <i class="fa-solid fa-triangle-exclamation"></i>
+    <div id="login-error-alert" class="login-alert-danger" style="display: none; width: 100%; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 12px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; align-items: center; gap: 8px; margin-bottom: 18px; text-align: left; box-sizing: border-box;">
+      <i class="fa-solid fa-triangle-exclamation" style="flex-shrink: 0;"></i>
       <span id="login-error-text">存取被拒</span>
     </div>
 
     <!-- Official Google GSI Button Container -->
-    <div class="google-btn-wrapper">
+    <div class="google-btn-wrapper" style="width: 100%; display: flex; justify-content: center; margin-bottom: 8px; min-height: 44px;">
       <div id="google-login-btn-container"></div>
     </div>
 
     <!-- Alternative / Direct Fallback Login -->
     <div class="login-divider">
-      <span>或直接輸入授權 Google 信箱登入</span>
+      <span>或直接輸入授權信箱</span>
     </div>
 
     <form onsubmit="handleDirectEmailLogin(event)" style="width: 100%;">
-      <div class="form-group" style="margin-bottom: 12px;">
-        <input type="email" id="login-direct-email" class="form-input" placeholder="例: huang761027@gmail.com" value="huang761027@gmail.com" required style="font-size: 14px; text-align: center;">
+      <div class="form-group" style="margin-bottom: 14px;">
+        <div style="position: relative; width: 100%;">
+          <i class="fa-solid fa-envelope" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 15px;"></i>
+          <input type="email" id="login-direct-email" class="form-input" placeholder="例: huang761027@gmail.com" value="huang761027@gmail.com" required style="width: 100%; box-sizing: border-box; padding: 12px 14px 12px 40px; font-size: 14.5px; border-radius: 12px; border: 1.5px solid #cbd5e1; outline: none; transition: border-color 0.2s;">
+        </div>
       </div>
-      <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 15px; font-weight: 700;">
+      <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 13px; font-size: 15.5px; font-weight: 700; border-radius: 12px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; color: white; cursor: pointer; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35); display: flex; align-items: center; gap: 8px;">
         <i class="fa-brands fa-google"></i> 安全驗證登入
       </button>
     </form>
 
     <div class="login-footer-hint">
-      <i class="fa-solid fa-shield-halved"></i> 系統受嚴格授權白名單保護，未授權帳號無法存取任何資料
+      <i class="fa-solid fa-lock" style="color: #2563eb;"></i> 系統受授權白名單保護，未授權帳號無法存取
     </div>
   </div>
 </div>
@@ -976,6 +1074,6 @@
   </div>
 </div>
 
-<script src="/js/app.js"></script>
+<script src="/js/app.js?v=20260904_3"></script>
 </body>
 </html>
