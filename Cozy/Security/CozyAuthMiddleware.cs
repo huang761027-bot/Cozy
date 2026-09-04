@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -60,7 +60,33 @@ namespace Cozy.Security
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 
-                var user = await dbContext.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+                SystemUser? user = null;
+                try
+                {
+                    user = await dbContext.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+                }
+                catch
+                {
+                    try
+                    {
+                        await dbContext.Database.ExecuteSqlRawAsync(@"
+                            CREATE TABLE IF NOT EXISTS `SystemUsers` (
+                                `Id` int NOT NULL AUTO_INCREMENT,
+                                `Email` varchar(191) NOT NULL,
+                                `Name` longtext NULL,
+                                `PictureUrl` longtext NULL,
+                                `Role` varchar(50) NOT NULL DEFAULT 'Staff',
+                                `IsActive` tinyint(1) NOT NULL DEFAULT 1,
+                                `LastLoginAt` datetime(6) NULL,
+                                `CreatedAt` datetime(6) NOT NULL,
+                                PRIMARY KEY (`Id`),
+                                UNIQUE KEY `IX_SystemUsers_Email` (`Email`)
+                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                        ");
+                        user = await dbContext.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+                    }
+                    catch { }
+                }
 
                 // Auto seed root admin if database is new
                 if (user == null && email == rootAdminEmail)

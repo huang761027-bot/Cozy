@@ -80,7 +80,7 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// 5. Automatic Database Initialization (EnsureCreated for MySQL / SQLite)
+// 5. Automatic Database Initialization (EnsureCreated and automatic table schema migrations)
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -90,6 +90,71 @@ using (var scope = app.Services.CreateScope())
         var db = services.GetRequiredService<AppDbContext>();
         logger.LogInformation("Ensuring database and tables exist (Provider: {Provider})...", db.Database.ProviderName);
         db.Database.EnsureCreated();
+
+        // If running on MySQL, ensure newly added tables (like SystemUsers, Projects, ProjectFiles) are created
+        if (db.Database.IsMySql())
+        {
+            db.Database.ExecuteSqlRaw(@"
+                CREATE TABLE IF NOT EXISTS `SystemUsers` (
+                    `Id` int NOT NULL AUTO_INCREMENT,
+                    `Email` varchar(191) NOT NULL,
+                    `Name` longtext NULL,
+                    `PictureUrl` longtext NULL,
+                    `Role` varchar(50) NOT NULL DEFAULT 'Staff',
+                    `IsActive` tinyint(1) NOT NULL DEFAULT 1,
+                    `LastLoginAt` datetime(6) NULL,
+                    `CreatedAt` datetime(6) NOT NULL,
+                    PRIMARY KEY (`Id`),
+                    UNIQUE KEY `IX_SystemUsers_Email` (`Email`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+
+            db.Database.ExecuteSqlRaw(@"
+                CREATE TABLE IF NOT EXISTS `Projects` (
+                    `Id` int NOT NULL AUTO_INCREMENT,
+                    `CustomerId` int NOT NULL,
+                    `ProjectNumber` varchar(50) NULL,
+                    `Name` varchar(255) NOT NULL,
+                    `Status` varchar(50) NOT NULL DEFAULT '進行中',
+                    `ContactPerson` varchar(100) NULL,
+                    `ContactPhone` varchar(50) NULL,
+                    `Address` varchar(255) NULL,
+                    `Budget` decimal(18,2) NULL,
+                    `StartDate` datetime(6) NULL,
+                    `EndDate` datetime(6) NULL,
+                    `Notes` longtext NULL,
+                    `CreatedAt` datetime(6) NOT NULL,
+                    PRIMARY KEY (`Id`),
+                    KEY `IX_Projects_CustomerId` (`CustomerId`),
+                    KEY `IX_Projects_Name` (`Name`),
+                    KEY `IX_Projects_ProjectNumber` (`ProjectNumber`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+
+            db.Database.ExecuteSqlRaw(@"
+                CREATE TABLE IF NOT EXISTS `ProjectFiles` (
+                    `Id` int NOT NULL AUTO_INCREMENT,
+                    `ProjectId` int NOT NULL,
+                    `FileName` varchar(255) NOT NULL,
+                    `OriginalFileName` varchar(255) NOT NULL,
+                    `ContentType` varchar(100) NOT NULL,
+                    `FileSize` bigint NOT NULL,
+                    `FilePath` varchar(500) NOT NULL,
+                    `UploadedAt` datetime(6) NOT NULL,
+                    PRIMARY KEY (`Id`),
+                    KEY `IX_ProjectFiles_ProjectId` (`ProjectId`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+
+            // Safe column additions
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `WorkLogs` ADD COLUMN `ProjectId` int NULL;"); } catch {}
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `WorkLogs` ADD COLUMN `IsPriority` tinyint(1) NOT NULL DEFAULT 0;"); } catch {}
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `WorkLogs` ADD COLUMN `StatusUpdatedAt` datetime(6) NULL;"); } catch {}
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `Quotations` ADD COLUMN `ProjectId` int NULL;"); } catch {}
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `Payments` ADD COLUMN `ProjectId` int NULL;"); } catch {}
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `Payments` ADD COLUMN `InvoiceImage` longtext NULL;"); } catch {}
+        }
+
         logger.LogInformation("Database tables initialized successfully!");
     }
     catch (Exception ex)

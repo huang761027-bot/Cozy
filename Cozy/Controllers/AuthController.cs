@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -124,11 +124,43 @@ namespace Cozy.Controllers
                 string rootAdminEmail = (Environment.GetEnvironmentVariable("SUPER_ADMIN_EMAIL") 
                     ?? "huang761027@gmail.com").Trim().ToLowerInvariant();
 
-                // Check if user exists in whitelist
-                var user = await _context.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+                // Check if user exists in whitelist (with auto-create table fallback)
+                SystemUser? user = null;
+                try
+                {
+                    user = await _context.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+                }
+                catch (Exception dbEx)
+                {
+                    try
+                    {
+                        await _context.Database.ExecuteSqlRawAsync(@"
+                            CREATE TABLE IF NOT EXISTS `SystemUsers` (
+                                `Id` int NOT NULL AUTO_INCREMENT,
+                                `Email` varchar(191) NOT NULL,
+                                `Name` longtext NULL,
+                                `PictureUrl` longtext NULL,
+                                `Role` varchar(50) NOT NULL DEFAULT 'Staff',
+                                `IsActive` tinyint(1) NOT NULL DEFAULT 1,
+                                `LastLoginAt` datetime(6) NULL,
+                                `CreatedAt` datetime(6) NOT NULL,
+                                PRIMARY KEY (`Id`),
+                                UNIQUE KEY `IX_SystemUsers_Email` (`Email`)
+                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                        ");
+                        user = await _context.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+                    }
+                    catch
+                    {
+                        throw dbEx;
+                    }
+                }
 
                 // Auto-seed root admin if it doesn't exist
-                if (user == null && (email == rootAdminEmail || !await _context.SystemUsers.AnyAsync()))
+                bool anyUsers = true;
+                try { anyUsers = await _context.SystemUsers.AnyAsync(); } catch { anyUsers = false; }
+
+                if (user == null && (email == rootAdminEmail || !anyUsers))
                 {
                     user = new SystemUser
                     {
