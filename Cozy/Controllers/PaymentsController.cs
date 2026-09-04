@@ -78,6 +78,7 @@ namespace Cozy.Controllers
                     p.PaymentMethod,
                     p.Status,
                     p.InvoiceNumber,
+                    p.InvoiceImageUrl,
                     p.Notes,
                     p.CreatedAt
                 })
@@ -167,6 +168,7 @@ namespace Cozy.Controllers
                 existing.PaymentMethod = payment.PaymentMethod;
                 existing.Status = payment.Status;
                 existing.InvoiceNumber = payment.InvoiceNumber;
+                existing.InvoiceImageUrl = payment.InvoiceImageUrl;
                 existing.Notes = payment.Notes;
 
                 await _context.SaveChangesAsync();

@@ -12,6 +12,9 @@
   <link rel="stylesheet" href="/css/app.css">
   <!-- FontAwesome 6 Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Barcode & QR Code Scanner Libraries for Taiwan Electronic Invoices -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 </head>
 <body>
 
@@ -530,6 +533,43 @@
           <input type="text" id="payment-invoice" class="form-input" placeholder="例: AB-12345678">
         </div>
       </div>
+
+      <!-- 發票照片上傳與智慧辨識 -->
+      <div class="form-group invoice-upload-section">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <label><i class="fa-solid fa-receipt" style="color: var(--primary);"></i> 發票照片 / 智慧辨識</label>
+          <label for="invoice-file-input" class="btn btn-sm btn-action-invoice" style="cursor: pointer; margin: 0;">
+            <i class="fa-solid fa-camera"></i> <span>拍照 / 上傳發票</span>
+          </label>
+          <input type="file" id="invoice-file-input" accept="image/*" capture="environment" style="display: none;" onchange="handleInvoiceUpload(event)">
+        </div>
+
+        <!-- 掃描中動畫與進度狀態 -->
+        <div id="invoice-scan-loading" class="invoice-scan-loading" style="display: none;">
+          <i class="fa-solid fa-spinner fa-spin"></i> <span>正在辨識發票條碼與 QR Code...</span>
+        </div>
+
+        <!-- 發票預覽與辨識結果 -->
+        <div id="invoice-preview-card" class="invoice-preview-card" style="display: none;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <img id="invoice-preview-thumb" src="" alt="發票縮圖" class="invoice-thumbnail" onclick="viewLargeImage(this.src)" title="點擊放大檢視發票">
+            <div style="flex-grow: 1; min-width: 0;">
+              <div id="invoice-scan-badge" class="badge badge-success" style="font-size: 11.5px; margin-bottom: 4px;">
+                <i class="fa-solid fa-check"></i> 辨識成功
+              </div>
+              <div id="invoice-scan-message" style="font-size: 13px; font-weight: 700; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                發票號碼：AB-12345678
+              </div>
+              <div id="invoice-scan-sub" style="font-size: 12px; color: #64748b;">
+                點擊圖片可放大檢視
+              </div>
+            </div>
+            <button type="button" class="btn-remove-invoice" onclick="clearInvoiceImage()" title="刪除此發票照片">&times;</button>
+          </div>
+        </div>
+        <input type="hidden" id="payment-invoice-image">
+      </div>
+
       <div class="form-group">
         <label>備註事項</label>
         <div class="input-mic-group" style="align-items: flex-start;">
@@ -585,6 +625,11 @@
       <button class="btn btn-secondary" onclick="closeModal('modal-quick-payment')">取消</button>
       <button class="btn btn-success" onclick="saveQuickPayment()"><i class="fa-solid fa-check"></i> 立即入帳</button>
     </div>
+<!-- Image Viewer Modal (檢視發票大圖) -->
+<div id="modal-image-viewer" class="modal-backdrop" style="display: none;" onclick="closeModal('modal-image-viewer')">
+  <div class="modal" style="max-width: 90vw; max-height: 90vh; background: transparent; box-shadow: none; border: none; align-items: center; justify-content: center; position: relative;" onclick="event.stopPropagation()">
+    <button class="close-btn" onclick="closeModal('modal-image-viewer')" style="position: absolute; top: -10px; right: -10px; background: #0f172a; color: white; border-radius: 50%; width: 36px; height: 36px; box-shadow: var(--shadow-md);">&times;</button>
+    <img id="image-viewer-src" src="" alt="發票原圖" style="max-width: 100%; max-height: 80vh; object-fit: contain; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); background: #fff;">
   </div>
 </div>
 

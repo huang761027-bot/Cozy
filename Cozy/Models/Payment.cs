@@ -36,6 +36,8 @@ namespace Cozy.Models
 
         public string? InvoiceNumber { get; set; }
 
+        public string? InvoiceImageUrl { get; set; }
+
         public string? Notes { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

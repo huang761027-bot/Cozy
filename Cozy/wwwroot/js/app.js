@@ -1046,7 +1046,8 @@ async function loadPayments() {
               <span><i class="fa-solid fa-user"></i> <b>${p.customerName}</b></span>
               <span><i class="fa-solid fa-money-bill-transfer" style="color: #64748b;"></i> ${p.paymentMethod}</span>
               <span><i class="fa-regular fa-calendar"></i> ${formatDate(p.paymentDate)}</span>
-              ${p.invoiceNumber ? `<span><i class="fa-solid fa-receipt"></i> 發票: ${p.invoiceNumber}</span>` : ''}
+              ${p.invoiceNumber ? `<span><i class="fa-solid fa-receipt"></i> 發票: <b>${p.invoiceNumber}</b></span>` : ''}
+              ${p.invoiceImageUrl ? `<span class="invoice-attachment-tag" onclick="viewLargeImage('${p.invoiceImageUrl}')"><i class="fa-solid fa-image"></i> 檢視發票相片</span>` : ''}
             </div>
             ${p.notes ? `<div style="font-size: 13px; color: #64748b; margin-top: 4px;"><i class="fa-regular fa-comment-dots"></i> 備註: ${p.notes}</div>` : ''}
           </div>
@@ -1085,6 +1086,8 @@ function openPaymentModal(id = null, preSelectCustomerId = null) {
     if (optionalHint) optionalHint.style.display = 'inline';
     if (!id) customerSelect.value = '';
   }
+
+  clearInvoiceImage();
 
   if (!id) {
     document.getElementById('payment-title-input').value = '';
@@ -1125,6 +1128,18 @@ async function editPayment(id) {
   document.getElementById('payment-invoice').value = p.invoiceNumber || '';
   document.getElementById('payment-notes').value = p.notes || '';
 
+  if (p.invoiceImageUrl) {
+    document.getElementById('payment-invoice-image').value = p.invoiceImageUrl;
+    document.getElementById('invoice-preview-thumb').src = p.invoiceImageUrl;
+    document.getElementById('invoice-preview-card').style.display = 'block';
+    document.getElementById('invoice-scan-badge').className = 'badge badge-success';
+    document.getElementById('invoice-scan-badge').innerHTML = '<i class="fa-solid fa-image"></i> 已附加相片';
+    document.getElementById('invoice-scan-message').innerText = p.invoiceNumber ? `發票號碼: ${p.invoiceNumber}` : '發票相片已附加';
+    document.getElementById('invoice-scan-sub').innerText = '點擊縮圖可放大檢視發票';
+  } else {
+    clearInvoiceImage();
+  }
+
   openModal('modal-payment');
 }
 
@@ -1154,6 +1169,7 @@ async function savePayment() {
     paymentMethod: document.getElementById('payment-method').value,
     status: document.getElementById('payment-status').value,
     invoiceNumber: document.getElementById('payment-invoice').value.trim(),
+    invoiceImageUrl: document.getElementById('payment-invoice-image').value || null,
     notes: document.getElementById('payment-notes').value.trim()
   };
 
@@ -1178,6 +1194,250 @@ async function savePayment() {
   } catch (err) {
     alert(`儲存收費紀錄時發生網路錯誤：${err.message || err}`);
   }
+}
+
+// ==================== 智慧發票拍照 / 條碼辨識 (INVOICE OCR & SCANNING) ====================
+async function handleInvoiceUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const loadingEl = document.getElementById('invoice-scan-loading');
+  const previewCard = document.getElementById('invoice-preview-card');
+  const thumbImg = document.getElementById('invoice-preview-thumb');
+  const badgeEl = document.getElementById('invoice-scan-badge');
+  const msgEl = document.getElementById('invoice-scan-message');
+  const subEl = document.getElementById('invoice-scan-sub');
+  const invoiceInput = document.getElementById('payment-invoice');
+  const imageInput = document.getElementById('payment-invoice-image');
+
+  loadingEl.style.display = 'flex';
+  previewCard.style.display = 'none';
+
+  try {
+    // 1. 讀取並壓縮優化相片為 Base64
+    const { dataUrl, imageElement } = await readAndOptimizeImage(file);
+    imageInput.value = dataUrl;
+    thumbImg.src = dataUrl;
+
+    // 2. 進行電子發票條碼 / QR Code 解碼
+    const scanResult = await scanInvoiceCode(imageElement);
+
+    loadingEl.style.display = 'none';
+    previewCard.style.display = 'block';
+
+    if (scanResult && scanResult.invoiceNumber) {
+      invoiceInput.value = scanResult.invoiceNumber;
+      badgeEl.className = 'badge badge-success';
+      badgeEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> 辨識成功';
+      msgEl.innerHTML = `發票號碼：<b style="color: var(--primary);">${scanResult.invoiceNumber}</b>`;
+
+      let details = [];
+      if (scanResult.amount) {
+        details.push(`發票金額: $${scanResult.amount.toLocaleString('zh-TW')}`);
+        const curAmt = parseFloat(document.getElementById('payment-amount').value);
+        if (!curAmt || curAmt === 5000) {
+          document.getElementById('payment-amount').value = scanResult.amount;
+        }
+      }
+      if (scanResult.dateStr) {
+        details.push(`發票日期: ${scanResult.dateStr}`);
+        document.getElementById('payment-date').value = scanResult.dateStr;
+      }
+      subEl.innerText = details.length > 0 ? details.join(' ｜ ') : '已自動填入發票號碼，點擊縮圖可放大檢視';
+    } else {
+      badgeEl.className = 'badge badge-warning';
+      badgeEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 照片已載入';
+      msgEl.innerText = '未能自動辨識出條碼，請手動輸入發票號碼';
+      subEl.innerText = '發票相片已成功附加至此筆紀錄';
+    }
+  } catch (err) {
+    console.error('Invoice scan error:', err);
+    loadingEl.style.display = 'none';
+    previewCard.style.display = 'block';
+    badgeEl.className = 'badge badge-warning';
+    badgeEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 照片已附加';
+    msgEl.innerText = '辨識時發生狀況，請手動填寫號碼';
+    subEl.innerText = '發票相片已成功保存';
+  } finally {
+    event.target.value = '';
+  }
+}
+
+function clearInvoiceImage() {
+  document.getElementById('payment-invoice-image').value = '';
+  document.getElementById('invoice-preview-thumb').src = '';
+  document.getElementById('invoice-preview-card').style.display = 'none';
+  const fileInput = document.getElementById('invoice-file-input');
+  if (fileInput) fileInput.value = '';
+}
+
+function viewLargeImage(src) {
+  if (!src) return;
+  document.getElementById('image-viewer-src').src = src;
+  openModal('modal-image-viewer');
+}
+
+// 壓縮相片至適合傳輸與辨識的尺寸 (最大寬高 1200px)
+function readAndOptimizeImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1200;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+        const optimizedImg = new Image();
+        optimizedImg.onload = () => resolve({ dataUrl, imageElement: optimizedImg });
+        optimizedImg.src = dataUrl;
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// 多引擎辨識發票條碼與 QR Code (Native BarcodeDetector -> jsQR -> ZXing)
+async function scanInvoiceCode(imageElement) {
+  const canvas = document.createElement('canvas');
+  canvas.width = imageElement.naturalWidth || imageElement.width;
+  canvas.height = imageElement.naturalHeight || imageElement.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(imageElement, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  let rawCode = null;
+
+  // 1. 優先使用現代瀏覽器原生 BarcodeDetector API
+  if ('BarcodeDetector' in window) {
+    try {
+      const detector = new window.BarcodeDetector({ formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8'] });
+      const barcodes = await detector.detect(imageElement);
+      if (barcodes && barcodes.length > 0) {
+        for (const b of barcodes) {
+          if (b.rawValue) {
+            const parsed = parseTaiwanInvoiceText(b.rawValue);
+            if (parsed.invoiceNumber) return parsed;
+            rawCode = b.rawValue;
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Native BarcodeDetector info:', e);
+    }
+  }
+
+  // 2. 使用 jsQR 引擎解析台灣電子發票左側 QR Code
+  if (typeof jsQR !== 'undefined') {
+    try {
+      const qr = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+      if (qr && qr.data) {
+        const parsed = parseTaiwanInvoiceText(qr.data);
+        if (parsed.invoiceNumber) return parsed;
+        rawCode = qr.data;
+      }
+    } catch (e) {
+      console.log('jsQR pass:', e);
+    }
+  }
+
+  // 3. 使用 ZXing 引擎解析 1D 發票條碼 (Code 39 / Code 128)
+  if (typeof ZXing !== 'undefined') {
+    try {
+      const reader = new ZXing.BrowserMultiFormatReader();
+      const result = await reader.decodeFromImageElement(imageElement);
+      if (result && result.getText()) {
+        const parsed = parseTaiwanInvoiceText(result.getText());
+        if (parsed.invoiceNumber) return parsed;
+        rawCode = result.getText();
+      }
+    } catch (e) {
+      // Normal when no 1D barcode
+    }
+  }
+
+  if (rawCode) {
+    return parseTaiwanInvoiceText(rawCode);
+  }
+
+  return null;
+}
+
+// 解析台灣統一發票 / 電子發票標準格式
+function parseTaiwanInvoiceText(text) {
+  if (!text) return {};
+  const cleaned = text.trim();
+
+  // 1. 台灣電子發票左側 QR Code 標準格式 (前10碼為發票字軌號碼，接著7碼民國日期，接著金額)
+  const qrMatch = cleaned.match(/^([A-Z]{2})(\d{8})(\d{7})([0-9a-zA-Z]{4})([0-9a-fA-F]{8})([0-9a-fA-F]{8})/);
+  if (qrMatch) {
+    const invPrefix = qrMatch[1];
+    const invDigits = qrMatch[2];
+    const rocDate = qrMatch[3]; // 例: "1130904"
+    const totalHex = qrMatch[6];
+
+    const invoiceNumber = `${invPrefix}-${invDigits}`;
+    let amount = parseInt(totalHex, 16);
+    if (isNaN(amount) || amount === 0) {
+      amount = parseInt(totalHex, 10) || null;
+    }
+
+    let dateStr = null;
+    if (rocDate && rocDate.length === 7) {
+      const rocYear = parseInt(rocDate.substring(0, 3), 10);
+      const ceYear = rocYear + 1911;
+      const month = rocDate.substring(3, 5);
+      const day = rocDate.substring(5, 7);
+      dateStr = `${ceYear}-${month}-${day}`;
+    }
+
+    return {
+      invoiceNumber,
+      amount,
+      dateStr,
+      raw: text
+    };
+  }
+
+  // 2. 台灣發票一維條碼格式 (19碼: 3碼民國年月 + 10碼發票號 + 4碼隨機碼)
+  const barcodeMatch = cleaned.match(/^\d{3}(0[1-9]|1[0-2])([A-Z]{2})(\d{8})\d{4}$/);
+  if (barcodeMatch) {
+    return {
+      invoiceNumber: `${barcodeMatch[2]}-${barcodeMatch[3]}`,
+      raw: text
+    };
+  }
+
+  // 3. 通用發票號碼正規式 (2英文字母 + 8碼數字)
+  const generalMatch = cleaned.match(/([A-Z]{2})[- ]?(\d{8})/);
+  if (generalMatch) {
+    return {
+      invoiceNumber: `${generalMatch[1]}-${generalMatch[2]}`,
+      raw: text
+    };
+  }
+
+  return { raw: text };
 }
 
 async function deletePayment(id) {
