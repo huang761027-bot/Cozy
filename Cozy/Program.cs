@@ -44,7 +44,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     else
     {
         // Local fallback: SQLite (Runs immediately without installing MySQL locally!)
-        options.UseSqlite("Data Source=cozy_local.db");
+        string sqliteDir = "/app/data";
+        string sqlitePath = "cozy_local.db";
+        if (System.IO.Directory.Exists(sqliteDir))
+        {
+            sqlitePath = System.IO.Path.Combine(sqliteDir, "cozy.db");
+        }
+        options.UseSqlite($"Data Source={sqlitePath}");
     }
 });
 
