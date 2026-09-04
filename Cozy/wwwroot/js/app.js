@@ -1,6 +1,7 @@
 // 永倉管理系統 (Yongcang Management System) Logic
 
 // Global Cache
+let currentUser = null;
 let customersCache = [];
 let projectsCache = [];
 let quotationsCache = [];
@@ -89,7 +90,7 @@ async function parseErrorMessage(res, defaultMsg = '儲存失敗') {
 }
 
 // Tab Navigation
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const navItems = document.querySelectorAll('.nav-item, .mobile-nav-item');
   navItems.forEach(item => {
     item.addEventListener('click', () => {
@@ -98,10 +99,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Initial Load
-  loadDashboard();
-  loadCustomers();
-  loadProjects();
+  // Verify Auth
+  const isAuthenticated = await checkAuth();
+  if (isAuthenticated) {
+    // Initial Load
+    loadDashboard();
+    loadCustomers();
+    loadProjects();
+  }
 });
 
 function switchTab(tabName) {
@@ -123,7 +128,8 @@ function switchTab(tabName) {
     projects: '<i class="fa-solid fa-folder-open"></i> <span>專案案場</span>',
     worklogs: '<i class="fa-solid fa-calendar-check"></i> <span>工作行程</span>',
     quotations: '<i class="fa-solid fa-file-invoice-dollar"></i> <span>報價管理</span>',
-    payments: '<i class="fa-solid fa-wallet"></i> <span>收費紀錄</span>'
+    payments: '<i class="fa-solid fa-wallet"></i> <span>收費紀錄</span>',
+    users: '<i class="fa-solid fa-user-shield"></i> <span>帳號授權管理</span>'
   };
 
   document.getElementById('page-title').innerHTML = titleConfigs[tabName] || '<i class="fa-solid fa-layer-group"></i> <span>永倉管理</span>';
@@ -136,6 +142,7 @@ function switchTab(tabName) {
   if (tabName === 'worklogs') loadWorkLogs();
   if (tabName === 'quotations') loadQuotations();
   if (tabName === 'payments') loadPayments();
+  if (tabName === 'users') loadUsers();
 }
 
 // ==================== 🎙️ 語音輸入功能 (SPEECH RECOGNITION - 新增資料時專用) ====================
@@ -920,7 +927,8 @@ async function loadWorkLogs() {
             </div>
             ${w.details ? `<div style="font-size: 13.5px; color: #334155; margin-top: 8px; white-space: pre-line; background: #f8fafc; border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 4px;">${w.details}</div>` : ''}
           </div>
-          <div style="display: flex; gap: 6px; align-items: center;">
+          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+            <button class="btn btn-sm btn-gcal" onclick="addToGoogleCalendar(${w.id})" title="一鍵加入個人 Google 日曆"><i class="fa-brands fa-google"></i> Google 日曆</button>
             <select class="select-input" style="padding: 4px 8px; font-size: 12.5px; font-weight: 600;" onchange="changeWorkLogStatus(${w.id}, this.value)">
               <option value="待處理" ${w.status === '待處理' ? 'selected' : ''}>待處理</option>
               <option value="進行中" ${w.status === '進行中' ? 'selected' : ''}>進行中</option>
@@ -2028,3 +2036,436 @@ function getProjectStatusBadgeClass(status) {
   if (status === '暫停') return 'badge-danger';
   return 'badge-gray';
 }
+
+// ==================== 🔒 身份驗證與 Google 登入 (AUTHENTICATION) ====================
+async function checkAuth() {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.ok) {
+      currentUser = await res.json();
+      applyAuthState(true);
+      return true;
+    } else {
+      currentUser = null;
+      applyAuthState(false);
+      return false;
+    }
+  } catch (err) {
+    console.error('Check auth error:', err);
+    currentUser = null;
+    applyAuthState(false);
+    return false;
+  }
+}
+
+function applyAuthState(isLoggedIn) {
+  const loginOverlay = document.getElementById('view-login');
+  const mainContainer = document.getElementById('app-main-container');
+  const userProfileWidget = document.getElementById('user-profile-widget');
+  const navItemUsers = document.getElementById('nav-item-users');
+  const mobileNavItemUsers = document.getElementById('mobile-nav-item-users');
+
+  if (isLoggedIn && currentUser) {
+    if (loginOverlay) loginOverlay.style.display = 'none';
+    if (mainContainer) mainContainer.style.display = 'flex';
+    if (userProfileWidget) {
+      userProfileWidget.style.display = 'flex';
+      const nameEl = document.getElementById('user-display-name');
+      if (nameEl) nameEl.textContent = currentUser.name || currentUser.email;
+      
+      const roleBadge = document.getElementById('user-display-role');
+      if (roleBadge) {
+        if (currentUser.role === 'Admin') {
+          roleBadge.textContent = '👑 超級管理員';
+          roleBadge.className = 'badge badge-designer';
+        } else {
+          roleBadge.textContent = '👤 一般員工';
+          roleBadge.className = 'badge badge-company';
+        }
+      }
+
+      const avatarImg = document.getElementById('user-avatar-img');
+      if (avatarImg) {
+        if (currentUser.pictureUrl) {
+          avatarImg.src = currentUser.pictureUrl;
+          avatarImg.style.display = 'block';
+        } else {
+          avatarImg.style.display = 'none';
+        }
+      }
+    }
+
+    if (currentUser.role === 'Admin') {
+      if (navItemUsers) navItemUsers.style.display = 'flex';
+      if (mobileNavItemUsers) mobileNavItemUsers.style.display = 'flex';
+    } else {
+      if (navItemUsers) navItemUsers.style.display = 'none';
+      if (mobileNavItemUsers) mobileNavItemUsers.style.display = 'none';
+    }
+  } else {
+    if (loginOverlay) loginOverlay.style.display = 'flex';
+    if (mainContainer) mainContainer.style.display = 'none';
+    if (userProfileWidget) userProfileWidget.style.display = 'none';
+    initGoogleLoginBtn();
+  }
+}
+
+async function initGoogleLoginBtn() {
+  try {
+    const res = await fetch('/api/auth/config');
+    if (!res.ok) return;
+    const config = await res.json();
+    if (config.clientId && window.google && window.google.accounts) {
+      window.google.accounts.id.initialize({
+        client_id: config.clientId,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false
+      });
+      const btnContainer = document.getElementById('google-login-btn-container');
+      if (btnContainer) {
+        btnContainer.innerHTML = '';
+        window.google.accounts.id.renderButton(btnContainer, {
+          theme: 'outline',
+          size: 'large',
+          type: 'standard',
+          shape: 'pill',
+          text: 'signin_with',
+          logo_alignment: 'left',
+          width: 320
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Init Google GSI failed:', err);
+  }
+}
+
+async function handleGoogleCredentialResponse(response) {
+  const errorAlert = document.getElementById('login-error-alert');
+  const errorText = document.getElementById('login-error-text');
+  if (errorAlert) errorAlert.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: response.credential })
+    });
+
+    if (res.ok) {
+      currentUser = await res.json();
+      applyAuthState(true);
+      loadDashboard();
+      loadCustomers();
+      loadProjects();
+    } else {
+      const msg = await parseErrorMessage(res, '此 Google 帳號未獲得系統授權，無法存取！');
+      if (errorAlert && errorText) {
+        errorText.textContent = msg;
+        errorAlert.style.display = 'flex';
+      } else {
+        alert(msg);
+      }
+    }
+  } catch (err) {
+    if (errorAlert && errorText) {
+      errorText.textContent = '登入連線失敗：' + err;
+      errorAlert.style.display = 'flex';
+    }
+  }
+}
+
+async function handleDirectEmailLogin(e) {
+  e.preventDefault();
+  const emailInput = document.getElementById('login-direct-email');
+  const email = emailInput ? emailInput.value.trim() : '';
+  if (!email) return;
+
+  const errorAlert = document.getElementById('login-error-alert');
+  const errorText = document.getElementById('login-error-text');
+  if (errorAlert) errorAlert.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email })
+    });
+
+    if (res.ok) {
+      currentUser = await res.json();
+      applyAuthState(true);
+      loadDashboard();
+      loadCustomers();
+      loadProjects();
+    } else {
+      const msg = await parseErrorMessage(res, '此 Google 信箱未在授權白名單內或已被停用！');
+      if (errorAlert && errorText) {
+        errorText.textContent = msg;
+        errorAlert.style.display = 'flex';
+      } else {
+        alert(msg);
+      }
+    }
+  } catch (err) {
+    if (errorAlert && errorText) {
+      errorText.textContent = '驗證登入連線失敗：' + err;
+      errorAlert.style.display = 'flex';
+    }
+  }
+}
+
+async function handleLogout() {
+  if (!confirm('確定要登出永倉管理系統嗎？')) return;
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } catch {}
+  currentUser = null;
+  applyAuthState(false);
+  window.location.reload();
+}
+
+// ==================== 📅 GOOGLE 日曆連動與 ICAL 匯出 ====================
+async function addToGoogleCalendar(workLogId) {
+  try {
+    const res = await fetch(`/api/worklogs/${workLogId}`);
+    if (!res.ok) {
+      alert('無法取得工作行程資訊');
+      return;
+    }
+    const w = await res.json();
+
+    const startDate = new Date(w.scheduledAt || Date.now());
+    const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 預設 1 小時
+
+    const formatGCalTime = (d) => {
+      return d.toISOString().replace(/-|:|\.\d+/g, '');
+    };
+
+    const dates = `${formatGCalTime(startDate)}/${formatGCalTime(endDate)}`;
+    const title = encodeURIComponent(`[永倉] ${w.title}${w.customerName ? ' - ' + w.customerName : ''}`);
+    const location = encodeURIComponent(w.location || '');
+    
+    let detailsText = `【工作項目】${w.title}\n`;
+    if (w.customerName) detailsText += `【客戶姓名】${w.customerName} ${w.customerPhone ? '(' + w.customerPhone + ')' : ''}\n`;
+    if (w.details) detailsText += `【行程備註】\n${w.details}\n`;
+    detailsText += `\n來自永倉管理系統`;
+    const details = encodeURIComponent(detailsText);
+
+    const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${details}&location=${location}&sf=true&output=xml`;
+    window.open(gcalUrl, '_blank');
+  } catch (err) {
+    alert('產生 Google 日曆連結時發生錯誤：' + err);
+  }
+}
+
+function exportWorkLogsCalendar() {
+  window.open('/api/worklogs/calendar.ics', '_blank');
+}
+
+// ==================== 👑 帳號授權白名單管理 (USER MANAGEMENT) ====================
+async function loadUsers() {
+  const listEl = document.getElementById('users-list');
+  if (!listEl) return;
+
+  const search = (document.getElementById('user-search')?.value || '').toLowerCase().trim();
+  const roleFilter = document.getElementById('user-role-filter')?.value || '';
+  const statusFilter = document.getElementById('user-status-filter')?.value || '';
+
+  try {
+    const res = await fetch('/api/users');
+    if (res.status === 403) {
+      listEl.innerHTML = '<p style="color: var(--danger); text-align: center; padding: 40px;"><i class="fa-solid fa-lock"></i> 只有超級管理者有權限管理使用者清單</p>';
+      return;
+    }
+    if (!res.ok) {
+      listEl.innerHTML = '<p style="color: var(--danger); text-align: center; padding: 40px;">載入使用者失敗</p>';
+      return;
+    }
+
+    let users = await res.json();
+
+    if (search) {
+      users = users.filter(u => 
+        (u.name && u.name.toLowerCase().includes(search)) ||
+        (u.email && u.email.toLowerCase().includes(search)) ||
+        (u.role && u.role.toLowerCase().includes(search))
+      );
+    }
+
+    if (roleFilter) {
+      users = users.filter(u => u.role === roleFilter);
+    }
+
+    if (statusFilter === 'active') {
+      users = users.filter(u => u.isActive);
+    } else if (statusFilter === 'disabled') {
+      users = users.filter(u => !u.isActive);
+    }
+
+    if (users.length === 0) {
+      listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 40px;">查無符合條件的授權帳號</p>';
+      return;
+    }
+
+    listEl.innerHTML = users.map(u => {
+      const isRootAdmin = u.email.toLowerCase() === 'huang761027@gmail.com';
+      const roleBadge = u.role === 'Admin' ? '<span class="badge badge-designer">👑 超級管理員</span>' : '<span class="badge badge-company">👤 一般員工</span>';
+      const statusBadge = u.isActive ? '<span class="badge badge-success">✅ 啟用中</span>' : '<span class="badge badge-danger">⛔ 已停用</span>';
+
+      return `
+        <div class="list-item-card">
+          <div class="list-item-top">
+            <div class="list-item-info">
+              <div class="list-item-title" style="align-items: center;">
+                ${u.pictureUrl ? `<img src="${u.pictureUrl}" class="user-avatar" style="width: 28px; height: 28px;">` : '<i class="fa-solid fa-user-shield" style="color: var(--primary);"></i>'}
+                <span><b>${u.name || u.email.split('@')[0]}</b></span>
+                <span style="font-size: 13px; color: var(--text-muted); font-weight: normal;">(${u.email})</span>
+                ${roleBadge}
+                ${statusBadge}
+                ${isRootAdmin ? '<span class="badge badge-warning">系統創始帳號</span>' : ''}
+              </div>
+              <div class="list-item-sub">
+                <span><i class="fa-regular fa-clock"></i> 授權建立: ${formatDateTime(u.createdAt)}</span>
+                ${u.lastLoginAt ? `<span><i class="fa-solid fa-arrow-right-to-bracket"></i> 最後登入: ${formatDateTime(u.lastLoginAt)}</span>` : '<span style="color: var(--text-muted);">尚未登入過</span>'}
+              </div>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <button class="btn btn-sm btn-secondary" onclick="openUserModal(${u.id})" title="編輯授權"><i class="fa-solid fa-pen"></i></button>
+              ${!isRootAdmin ? `
+                <button class="btn btn-sm ${u.isActive ? 'btn-danger' : 'btn-success'}" onclick="toggleUserStatus(${u.id}, ${!u.isActive})" title="${u.isActive ? '停用此帳號' : '啟用此帳號'}">
+                  ${u.isActive ? '<i class="fa-solid fa-ban"></i>' : '<i class="fa-solid fa-check"></i>'}
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id}, '${u.email}')" title="刪除授權"><i class="fa-solid fa-trash"></i></button>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    listEl.innerHTML = `<p style="color: var(--danger); text-align: center; padding: 40px;">載入錯誤：${err}</p>`;
+  }
+}
+
+async function openUserModal(id = null) {
+  document.getElementById('user-id').value = id || '';
+  document.getElementById('modal-user-title').innerHTML = id ? '<i class="fa-solid fa-user-pen" style="color: var(--primary);"></i> 編輯授權帳號' : '<i class="fa-solid fa-user-plus" style="color: var(--primary);"></i> 新增授權 Google 帳號';
+
+  const emailInput = document.getElementById('user-email');
+
+  if (id) {
+    try {
+      const res = await fetch('/api/users');
+      if (!res.ok) return;
+      const users = await res.json();
+      const u = users.find(x => x.id === id);
+      if (u) {
+        emailInput.value = u.email;
+        emailInput.disabled = (u.email.toLowerCase() === 'huang761027@gmail.com');
+        document.getElementById('user-name').value = u.name || '';
+        document.getElementById('user-role').value = u.role || 'Staff';
+        document.getElementById('user-is-active').value = u.isActive ? 'true' : 'false';
+      }
+    } catch (err) {
+      alert('載入使用者資料失敗');
+      return;
+    }
+  } else {
+    emailInput.disabled = false;
+    emailInput.value = '';
+    document.getElementById('user-name').value = '';
+    document.getElementById('user-role').value = 'Staff';
+    document.getElementById('user-is-active').value = 'true';
+  }
+
+  openModal('modal-user');
+}
+
+async function saveUser() {
+  const id = document.getElementById('user-id').value;
+  const email = document.getElementById('user-email').value.trim();
+  const name = document.getElementById('user-name').value.trim();
+  const role = document.getElementById('user-role').value;
+  const isActive = document.getElementById('user-is-active').value === 'true';
+
+  if (!email) {
+    alert('請輸入 Google 信箱！');
+    return;
+  }
+
+  const payload = {
+    id: id ? parseInt(id) : 0,
+    email: email,
+    name: name || email.split('@')[0],
+    role: role,
+    isActive: isActive
+  };
+
+  try {
+    const url = id ? `/api/users/${id}` : '/api/users';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      closeModal('modal-user');
+      loadUsers();
+      alert(id ? '使用者授權修改成功！' : '成功新增授權帳號！');
+    } else {
+      const msg = await parseErrorMessage(res, '儲存授權資料失敗');
+      alert(msg);
+    }
+  } catch (err) {
+    alert('儲存時發生錯誤：' + err);
+  }
+}
+
+async function toggleUserStatus(id, newStatus) {
+  try {
+    const res = await fetch('/api/users');
+    if (!res.ok) return;
+    const users = await res.json();
+    const u = users.find(x => x.id === id);
+    if (!u) return;
+
+    u.isActive = newStatus;
+
+    const putRes = await fetch(`/api/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(u)
+    });
+
+    if (putRes.ok) {
+      loadUsers();
+    } else {
+      const msg = await parseErrorMessage(putRes, '變更狀態失敗');
+      alert(msg);
+    }
+  } catch (err) {
+    alert('變更狀態時發生錯誤：' + err);
+  }
+}
+
+async function deleteUser(id, email) {
+  if (!confirm(`確定要刪除「${email}」的授權嗎？\n刪除後該 Google 帳號將無法登入系統。`)) return;
+
+  try {
+    const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      loadUsers();
+      alert('已成功刪除該帳號授權');
+    } else {
+      const msg = await parseErrorMessage(res, '刪除失敗');
+      alert(msg);
+    }
+  } catch (err) {
+    alert('刪除時發生錯誤：' + err);
+  }
+}
+

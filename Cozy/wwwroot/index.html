@@ -14,11 +14,52 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Barcode & QR Code Scanner Libraries for Taiwan Electronic Invoices -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+  <!-- Google Identity Services (GSI) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
-<div class="app-container">
+<!-- Full Screen Google Login Overlay (最高安全隔離防護) -->
+<div id="view-login" class="login-overlay-backdrop" style="display: flex;">
+  <div class="login-card">
+    <div class="login-brand-icon">
+      <i class="fa-solid fa-layer-group"></i>
+    </div>
+    <h2 class="login-title">永倉管理系統</h2>
+    <p class="login-subtitle">最高安全防護 ｜ 請使用授權之 Google 帳號登入</p>
+
+    <!-- Error / Access Denied Alert -->
+    <div id="login-error-alert" class="login-alert-danger" style="display: none;">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span id="login-error-text">存取被拒</span>
+    </div>
+
+    <!-- Official Google GSI Button Container -->
+    <div class="google-btn-wrapper">
+      <div id="google-login-btn-container"></div>
+    </div>
+
+    <!-- Alternative / Direct Fallback Login -->
+    <div class="login-divider">
+      <span>或直接輸入授權 Google 信箱登入</span>
+    </div>
+
+    <form onsubmit="handleDirectEmailLogin(event)" style="width: 100%;">
+      <div class="form-group" style="margin-bottom: 12px;">
+        <input type="email" id="login-direct-email" class="form-input" placeholder="例: huang761027@gmail.com" value="huang761027@gmail.com" required style="font-size: 14px; text-align: center;">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 15px; font-weight: 700;">
+        <i class="fa-brands fa-google"></i> 安全驗證登入
+      </button>
+    </form>
+
+    <div class="login-footer-hint">
+      <i class="fa-solid fa-shield-halved"></i> 系統受嚴格授權白名單保護，未授權帳號無法存取任何資料
+    </div>
+  </div>
+</div>
+
+<div class="app-container" id="app-main-container" style="display: none;">
   <!-- Desktop Sidebar -->
   <aside class="sidebar">
     <div class="brand">
@@ -52,6 +93,10 @@
         <i class="fa-solid fa-wallet"></i>
         <span>收費紀錄</span>
       </a>
+      <a class="nav-item" id="nav-item-users" data-tab="users" style="display: none;">
+        <i class="fa-solid fa-user-shield"></i>
+        <span>帳號管理</span>
+      </a>
     </nav>
     <div style="margin-top: auto; font-size: 12px; color: #64748b; text-align: center;">
       永倉管理系統 v2.0
@@ -70,6 +115,18 @@
         <button class="quick-charge-btn" onclick="openQuickPaymentModal()">
           <i class="fa-solid fa-bolt"></i> 快速記帳
         </button>
+
+        <!-- Logged In User Profile Widget -->
+        <div id="user-profile-widget" class="user-profile-box" style="display: none;">
+          <img id="user-avatar-img" src="" alt="Google 頭像" class="user-avatar" style="display: none;">
+          <div class="user-info-text">
+            <span id="user-display-name" class="user-name">管理員</span>
+            <span id="user-display-role" class="badge badge-designer" style="font-size: 10px;">👑 超級管理員</span>
+          </div>
+          <button class="btn-logout" onclick="handleLogout()" title="登出系統">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -205,6 +262,9 @@
           <option value="已完成">已完成</option>
           <option value="已取消">已取消</option>
         </select>
+        <button class="btn btn-secondary" onclick="exportWorkLogsCalendar()" title="下載或訂閱 iCal 行事曆">
+          <i class="fa-solid fa-calendar-days"></i> 訂閱行事曆 (.ics)
+        </button>
         <span style="font-size: 13px; color: var(--text-muted); margin-left: auto;">
           💡 提示：工作行程由「客戶資料」中產生，在此直接點擊即可變更狀態
         </span>
@@ -257,6 +317,32 @@
         <!-- Payments rendered by JS -->
       </div>
     </section>
+
+    <!-- SECTION 6: 授權管理 (Users - 超級管理者專用) -->
+    <section id="view-users" class="content-view" style="display: none;">
+      <div class="filter-bar">
+        <div class="search-input-wrapper">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="user-search" class="search-input" placeholder="搜尋姓名、Google 信箱、角色..." oninput="debounce(loadUsers, 300)()">
+        </div>
+        <select id="user-role-filter" class="select-input" onchange="loadUsers()">
+          <option value="">全部角色</option>
+          <option value="Admin">👑 超級管理員</option>
+          <option value="Staff">👤 一般員工</option>
+        </select>
+        <select id="user-status-filter" class="select-input" onchange="loadUsers()">
+          <option value="">全部狀態</option>
+          <option value="active">啟用中</option>
+          <option value="disabled">已停用</option>
+        </select>
+        <button class="btn btn-primary" onclick="openUserModal()">
+          <i class="fa-solid fa-user-plus"></i> 新增授權帳號
+        </button>
+      </div>
+      <div id="users-list" class="item-list">
+        <!-- Users rendered by JS -->
+      </div>
+    </section>
   </main>
 
   <!-- Mobile Bottom Nav -->
@@ -284,6 +370,10 @@
     <a class="mobile-nav-item" data-tab="payments">
       <i class="fa-solid fa-wallet icon"></i>
       <span>收費</span>
+    </a>
+    <a class="mobile-nav-item" id="mobile-nav-item-users" data-tab="users" style="display: none;">
+      <i class="fa-solid fa-user-shield icon"></i>
+      <span>帳號</span>
     </a>
   </nav>
 </div>
@@ -833,6 +923,56 @@
   <div class="modal" style="max-width: 90vw; max-height: 90vh; background: transparent; box-shadow: none; border: none; align-items: center; justify-content: center; position: relative;" onclick="event.stopPropagation()">
     <button class="close-btn" onclick="closeModal('modal-image-viewer')" style="position: absolute; top: -10px; right: -10px; background: #0f172a; color: white; border-radius: 50%; width: 36px; height: 36px; box-shadow: var(--shadow-md);">&times;</button>
     <img id="image-viewer-src" src="" alt="發票原圖" style="max-width: 100%; max-height: 80vh; object-fit: contain; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); background: #fff;">
+  </div>
+</div>
+
+<!-- User Modal (新增 / 編輯授權 Google 帳號 - 超級管理者用) -->
+<div id="modal-user" class="modal-backdrop" style="display: none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-user-title"><i class="fa-solid fa-user-shield" style="color: var(--primary);"></i> 新增授權 Google 帳號</h3>
+      <button class="close-btn" onclick="closeModal('modal-user')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="user-id">
+      
+      <div class="form-group">
+        <label>Google 信箱 <span style="color:red">* (必填，將作為登入驗證帳號)</span></label>
+        <input type="email" id="user-email" class="form-input" placeholder="例: user@gmail.com" required>
+      </div>
+
+      <div class="form-group">
+        <label>使用者姓名 / 暱稱 <span style="color:red">*</span></label>
+        <input type="text" id="user-name" class="form-input" placeholder="例: 系統管理員 / 張小明" required>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>系統權限角色 <span style="color:red">*</span></label>
+          <select id="user-role" class="select-input">
+            <option value="Staff" selected>👤 一般員工</option>
+            <option value="Admin">👑 超級管理員</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>帳號啟用狀態 <span style="color:red">*</span></label>
+          <select id="user-is-active" class="select-input">
+            <option value="true" selected>✅ 啟用 (允許登入)</option>
+            <option value="false">⛔ 停用 (阻擋登入)</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="font-size: 12.5px; color: var(--text-muted); background: #f8fafc; padding: 10px; border-radius: 6px; border-left: 3px solid #3b82f6; margin-top: 6px;">
+        <i class="fa-solid fa-shield-halved"></i> <b>權限說明：</b><br>
+        - <b>👑 超級管理員</b>：可新增、修改、停用其他帳號，並享有全系統所有功能。<br>
+        - <b>👤 一般員工</b>：可正常操作客戶、專案、工作行程、報價與收費，但無法查看與修改帳號授權清單。
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-user')">取消</button>
+      <button class="btn btn-primary" onclick="saveUser()"><i class="fa-solid fa-check"></i> 儲存授權資料</button>
+    </div>
   </div>
 </div>
 

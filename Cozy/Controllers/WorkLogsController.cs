@@ -202,6 +202,53 @@ namespace Cozy.Controllers
             }
         }
 
+        // GET: api/WorkLogs/calendar.ics
+        [HttpGet("calendar.ics")]
+        public async Task<IActionResult> GetCalendarIcs()
+        {
+            var workLogs = await _context.WorkLogs
+                .Include(w => w.Customer)
+                .Where(w => w.Status != "已取消")
+                .OrderByDescending(w => w.ScheduledAt)
+                .Take(200)
+                .ToListAsync();
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("BEGIN:VCALENDAR");
+            sb.AppendLine("VERSION:2.0");
+            sb.AppendLine("PRODID:-//Cozy//Yongcang Work Schedule//TW");
+            sb.AppendLine("CALSCALE:GREGORIAN");
+            sb.AppendLine("METHOD:PUBLISH");
+            sb.AppendLine("X-WR-CALNAME:永倉工作行程");
+            sb.AppendLine("X-WR-TIMEZONE:Asia/Taipei");
+
+            foreach (var w in workLogs)
+            {
+                var start = w.ScheduledAt;
+                var end = start.AddHours(2);
+                string custName = w.Customer != null ? w.Customer.Name : "未指定客戶";
+                string title = $"【永倉】{w.Title} - {custName}";
+                string loc = (w.Location ?? (w.Customer != null ? w.Customer.Address : "") ?? "").Replace(",", "\\,").Replace(";", "\\;");
+                string desc = $"狀態: {w.Status}\\n客戶電話: {(w.Customer?.Phone ?? "無")}\\n工作說明: {w.Details ?? "無"}".Replace("\r", "").Replace("\n", "\\n");
+
+                sb.AppendLine("BEGIN:VEVENT");
+                sb.AppendLine($"UID:worklog-{w.Id}@cozy-system");
+                sb.AppendLine($"DTSTAMP:{DateTime.UtcNow:yyyyMMdd\\THHmmss\\Z}");
+                sb.AppendLine($"DTSTART:{start.ToUniversalTime():yyyyMMdd\\THHmmss\\Z}");
+                sb.AppendLine($"DTEND:{end.ToUniversalTime():yyyyMMdd\\THHmmss\\Z}");
+                sb.AppendLine($"SUMMARY:{title}");
+                sb.AppendLine($"LOCATION:{loc}");
+                sb.AppendLine($"DESCRIPTION:{desc}");
+                sb.AppendLine("STATUS:CONFIRMED");
+                sb.AppendLine("END:VEVENT");
+            }
+
+            sb.AppendLine("END:VCALENDAR");
+
+            byte[] icsBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+            return File(icsBytes, "text/calendar", "cozy_work_schedule.ics");
+        }
+
         // DELETE: api/WorkLogs/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteWorkLog(int id)

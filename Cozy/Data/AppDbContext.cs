@@ -10,6 +10,7 @@ namespace Cozy.Data
         }
 
         public DbSet<Customer> Customers => Set<Customer>();
+        public DbSet<SystemUser> SystemUsers => Set<SystemUser>();
         public DbSet<Project> Projects => Set<Project>();
         public DbSet<ProjectFile> ProjectFiles => Set<ProjectFile>();
         public DbSet<WorkLog> WorkLogs => Set<WorkLog>();
@@ -81,6 +82,10 @@ namespace Cozy.Data
 
             modelBuilder.Entity<Quotation>()
                 .HasIndex(q => q.QuotationNumber)
+                .IsUnique();
+
+            modelBuilder.Entity<SystemUser>()
+                .HasIndex(u => u.Email)
                 .IsUnique();
 
             modelBuilder.Entity<Payment>()
