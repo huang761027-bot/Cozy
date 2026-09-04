@@ -10,7 +10,6 @@ namespace Cozy.Models
         [Key]
         public int Id { get; set; }
 
-        [Required]
         [MaxLength(50)]
         public string QuotationNumber { get; set; } = string.Empty;
 

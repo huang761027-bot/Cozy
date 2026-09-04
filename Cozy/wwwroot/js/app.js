@@ -55,6 +55,28 @@ function closeModal(id) {
   document.getElementById(id).style.display = 'none';
 }
 
+// Utility: parse server error response
+async function parseErrorMessage(res, defaultMsg = '儲存失敗') {
+  try {
+    const text = await res.text();
+    if (!text) return defaultMsg;
+    try {
+      const data = JSON.parse(text);
+      if (data.message) return data.message;
+      if (data.errors) {
+        const msgs = Object.values(data.errors).flat();
+        if (msgs.length > 0) return msgs.join('、');
+      }
+      if (data.title) return data.title;
+      return typeof data === 'string' ? data : JSON.stringify(data);
+    } catch {
+      return text;
+    }
+  } catch {
+    return defaultMsg;
+  }
+}
+
 // Tab Navigation
 document.addEventListener('DOMContentLoaded', () => {
   const navItems = document.querySelectorAll('.nav-item, .mobile-nav-item');
@@ -378,18 +400,23 @@ async function saveCustomer() {
   const method = id ? 'PUT' : 'POST';
   const url = id ? `/api/customers/${id}` : '/api/customers';
 
-  const res = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-  if (res.ok) {
-    closeModal('modal-customer');
-    loadCustomers();
-    loadDashboard();
-  } else {
-    alert('儲存失敗，請確認姓名與電話皆已填寫');
+    if (res.ok) {
+      closeModal('modal-customer');
+      loadCustomers();
+      loadDashboard();
+    } else {
+      const errMsg = await parseErrorMessage(res, '請確認姓名與電話皆已填寫');
+      alert(`儲存客戶資料失敗：${errMsg}`);
+    }
+  } catch (err) {
+    alert(`儲存客戶資料時發生網路錯誤：${err.message || err}`);
   }
 }
 
@@ -544,18 +571,23 @@ async function saveWorkLog() {
   const method = id ? 'PUT' : 'POST';
   const url = id ? `/api/worklogs/${id}` : '/api/worklogs';
 
-  const res = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-  if (res.ok) {
-    closeModal('modal-worklog');
-    loadWorkLogs();
-    loadDashboard();
-  } else {
-    alert('儲存失敗');
+    if (res.ok) {
+      closeModal('modal-worklog');
+      loadWorkLogs();
+      loadDashboard();
+    } else {
+      const errMsg = await parseErrorMessage(res, '請檢查輸入欄位');
+      alert(`儲存行程失敗：${errMsg}`);
+    }
+  } catch (err) {
+    alert(`儲存行程時發生網路錯誤：${err.message || err}`);
   }
 }
 
@@ -841,12 +873,13 @@ async function saveQuotation() {
     return;
   }
 
+  const issueDateVal = document.getElementById('quotation-date').value;
   const payload = {
     id: id ? parseInt(id) : 0,
     quotationNumber: document.getElementById('quotation-number').value.trim(),
     customerId: parseInt(customerId),
     title,
-    issueDate: new Date(document.getElementById('quotation-date').value).toISOString(),
+    issueDate: issueDateVal ? new Date(issueDateVal).toISOString() : new Date().toISOString(),
     status: document.getElementById('quotation-status').value,
     notes: document.getElementById('quotation-notes').value.trim(),
     items
@@ -855,17 +888,22 @@ async function saveQuotation() {
   const method = id ? 'PUT' : 'POST';
   const url = id ? `/api/quotations/${id}` : '/api/quotations';
 
-  const res = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-  if (res.ok) {
-    closeModal('modal-quotation');
-    loadQuotations();
-  } else {
-    alert('儲存報價單失敗');
+    if (res.ok) {
+      closeModal('modal-quotation');
+      loadQuotations();
+    } else {
+      const errMsg = await parseErrorMessage(res, '請檢查各欄位填寫');
+      alert(`儲存報價單失敗：${errMsg}`);
+    }
+  } catch (err) {
+    alert(`儲存報價單時發生網路錯誤：${err.message || err}`);
   }
 }
 
@@ -1106,12 +1144,13 @@ async function savePayment() {
     return;
   }
 
+  const paymentDateVal = document.getElementById('payment-date').value;
   const payload = {
     id: id ? parseInt(id) : 0,
     customerId: customerIdVal ? parseInt(customerIdVal) : null,
     title,
     amount,
-    paymentDate: new Date(document.getElementById('payment-date').value).toISOString(),
+    paymentDate: paymentDateVal ? new Date(paymentDateVal).toISOString() : new Date().toISOString(),
     paymentMethod: document.getElementById('payment-method').value,
     status: document.getElementById('payment-status').value,
     invoiceNumber: document.getElementById('payment-invoice').value.trim(),
@@ -1121,18 +1160,23 @@ async function savePayment() {
   const method = id ? 'PUT' : 'POST';
   const url = id ? `/api/payments/${id}` : '/api/payments';
 
-  const res = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-  if (res.ok) {
-    closeModal('modal-payment');
-    loadPayments();
-    loadDashboard();
-  } else {
-    alert('儲存收費紀錄失敗');
+    if (res.ok) {
+      closeModal('modal-payment');
+      loadPayments();
+      loadDashboard();
+    } else {
+      const errMsg = await parseErrorMessage(res, '請檢查各欄位填寫');
+      alert(`儲存收費紀錄失敗：${errMsg}`);
+    }
+  } catch (err) {
+    alert(`儲存收費紀錄時發生網路錯誤：${err.message || err}`);
   }
 }
 

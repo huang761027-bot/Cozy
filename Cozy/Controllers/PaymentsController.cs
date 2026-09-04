@@ -107,52 +107,76 @@ namespace Cozy.Controllers
         [HttpPost]
         public async Task<ActionResult<Payment>> CreatePayment([FromBody] Payment payment)
         {
-            if (string.IsNullOrWhiteSpace(payment.Title))
+            try
             {
-                return BadRequest(new { message = "收費項目說明為必填項目" });
-            }
+                if (string.IsNullOrWhiteSpace(payment.Title))
+                {
+                    return BadRequest(new { message = "收費項目說明為必填項目" });
+                }
 
-            // If customerId is 0 or not found, set to null (anonymous customer)
-            if (payment.CustomerId.HasValue && payment.CustomerId.Value <= 0)
+                // If customerId is 0 or not found, set to null (anonymous customer)
+                if (payment.CustomerId.HasValue && payment.CustomerId.Value <= 0)
+                {
+                    payment.CustomerId = null;
+                }
+
+                if (payment.PaymentDate == default)
+                {
+                    payment.PaymentDate = DateTime.UtcNow;
+                }
+
+                payment.CreatedAt = DateTime.UtcNow;
+                _context.Payments.Add(payment);
+                await _context.SaveChangesAsync();
+
+                return CreatedAtAction(nameof(GetPayment), new { id = payment.Id }, payment);
+            }
+            catch (Exception ex)
             {
-                payment.CustomerId = null;
+                return StatusCode(500, new { message = "儲存收費記錄失敗: " + ex.Message });
             }
-
-            payment.CreatedAt = DateTime.UtcNow;
-            _context.Payments.Add(payment);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetPayment), new { id = payment.Id }, payment);
         }
 
         // PUT: api/Payments/5
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdatePayment(int id, [FromBody] Payment payment)
         {
-            if (id != payment.Id)
+            try
             {
-                return BadRequest(new { message = "ID 不符" });
-            }
+                if (id != payment.Id)
+                {
+                    return BadRequest(new { message = "ID 不符" });
+                }
 
-            var existing = await _context.Payments.FindAsync(id);
-            if (existing == null)
+                if (string.IsNullOrWhiteSpace(payment.Title))
+                {
+                    return BadRequest(new { message = "收費項目說明為必填項目" });
+                }
+
+                var existing = await _context.Payments.FindAsync(id);
+                if (existing == null)
+                {
+                    return NotFound(new { message = "找不到此收費記錄" });
+                }
+
+                existing.CustomerId = (payment.CustomerId.HasValue && payment.CustomerId.Value > 0) ? payment.CustomerId : null;
+                existing.QuotationId = payment.QuotationId;
+                existing.Title = payment.Title;
+                existing.Amount = payment.Amount;
+                existing.PaymentDate = payment.PaymentDate != default ? payment.PaymentDate : existing.PaymentDate;
+                existing.PaymentMethod = payment.PaymentMethod;
+                existing.Status = payment.Status;
+                existing.InvoiceNumber = payment.InvoiceNumber;
+                existing.Notes = payment.Notes;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(existing);
+            }
+            catch (Exception ex)
             {
-                return NotFound(new { message = "找不到此收費記錄" });
+                return StatusCode(500, new { message = "更新收費記錄失敗: " + ex.Message });
             }
-
-            existing.CustomerId = (payment.CustomerId.HasValue && payment.CustomerId.Value > 0) ? payment.CustomerId : null;
-            existing.QuotationId = payment.QuotationId;
-            existing.Title = payment.Title;
-            existing.Amount = payment.Amount;
-            existing.PaymentDate = payment.PaymentDate;
-            existing.PaymentMethod = payment.PaymentMethod;
-            existing.Status = payment.Status;
-            existing.InvoiceNumber = payment.InvoiceNumber;
-            existing.Notes = payment.Notes;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(existing);
         }
 
         // DELETE: api/Payments/5

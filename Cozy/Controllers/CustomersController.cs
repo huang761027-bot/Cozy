@@ -64,62 +64,76 @@ namespace Cozy.Controllers
         [HttpPost]
         public async Task<ActionResult<Customer>> CreateCustomer([FromBody] Customer customer)
         {
-            if (string.IsNullOrWhiteSpace(customer.Name))
+            try
             {
-                return BadRequest(new { message = "客戶姓名為必填項目" });
+                if (string.IsNullOrWhiteSpace(customer.Name))
+                {
+                    return BadRequest(new { message = "客戶姓名為必填項目" });
+                }
+                if (string.IsNullOrWhiteSpace(customer.Phone))
+                {
+                    return BadRequest(new { message = "客戶電話為必填項目" });
+                }
+
+                if (string.IsNullOrWhiteSpace(customer.Category))
+                {
+                    customer.Category = "個人";
+                }
+
+                customer.CreatedAt = System.DateTime.UtcNow;
+                _context.Customers.Add(customer);
+                await _context.SaveChangesAsync();
+
+                return CreatedAtAction(nameof(GetCustomer), new { id = customer.Id }, customer);
             }
-            if (string.IsNullOrWhiteSpace(customer.Phone))
+            catch (System.Exception ex)
             {
-                return BadRequest(new { message = "客戶電話為必填項目" });
+                return StatusCode(500, new { message = "儲存客戶失敗: " + ex.Message });
             }
-
-            if (string.IsNullOrWhiteSpace(customer.Category))
-            {
-                customer.Category = "個人";
-            }
-
-            customer.CreatedAt = System.DateTime.UtcNow;
-            _context.Customers.Add(customer);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetCustomer), new { id = customer.Id }, customer);
         }
 
         // PUT: api/Customers/5
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCustomer(int id, [FromBody] Customer customer)
         {
-            if (id != customer.Id)
+            try
             {
-                return BadRequest(new { message = "ID 不符" });
-            }
+                if (id != customer.Id)
+                {
+                    return BadRequest(new { message = "ID 不符" });
+                }
 
-            if (string.IsNullOrWhiteSpace(customer.Name))
+                if (string.IsNullOrWhiteSpace(customer.Name))
+                {
+                    return BadRequest(new { message = "客戶姓名為必填項目" });
+                }
+                if (string.IsNullOrWhiteSpace(customer.Phone))
+                {
+                    return BadRequest(new { message = "客戶電話為必填項目" });
+                }
+
+                var existing = await _context.Customers.FindAsync(id);
+                if (existing == null)
+                {
+                    return NotFound(new { message = "找不到此客戶" });
+                }
+
+                existing.Name = customer.Name;
+                existing.Phone = customer.Phone;
+                existing.Category = string.IsNullOrWhiteSpace(customer.Category) ? "個人" : customer.Category;
+                existing.LineId = customer.LineId;
+                existing.Address = customer.Address;
+                existing.Email = customer.Email;
+                existing.Notes = customer.Notes;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(existing);
+            }
+            catch (System.Exception ex)
             {
-                return BadRequest(new { message = "客戶姓名為必填項目" });
+                return StatusCode(500, new { message = "更新客戶失敗: " + ex.Message });
             }
-            if (string.IsNullOrWhiteSpace(customer.Phone))
-            {
-                return BadRequest(new { message = "客戶電話為必填項目" });
-            }
-
-            var existing = await _context.Customers.FindAsync(id);
-            if (existing == null)
-            {
-                return NotFound(new { message = "找不到此客戶" });
-            }
-
-            existing.Name = customer.Name;
-            existing.Phone = customer.Phone;
-            existing.Category = string.IsNullOrWhiteSpace(customer.Category) ? "個人" : customer.Category;
-            existing.LineId = customer.LineId;
-            existing.Address = customer.Address;
-            existing.Email = customer.Email;
-            existing.Notes = customer.Notes;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(existing);
         }
 
         // DELETE: api/Customers/5

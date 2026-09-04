@@ -90,31 +90,52 @@ namespace Cozy.Controllers
         [HttpPost]
         public async Task<ActionResult<Quotation>> CreateQuotation([FromBody] Quotation quotation)
         {
-            if (string.IsNullOrWhiteSpace(quotation.QuotationNumber))
+            try
             {
-                // Auto generate quotation number like QT-20260904-001
-                string todayPrefix = $"QT-{DateTime.UtcNow:yyyyMMdd}";
-                int countToday = await _context.Quotations.CountAsync(q => q.QuotationNumber.StartsWith(todayPrefix));
-                quotation.QuotationNumber = $"{todayPrefix}-{(countToday + 1):D3}";
-            }
-
-            // Recalculate item subtotals and total amount
-            decimal total = 0;
-            if (quotation.Items != null)
-            {
-                foreach (var item in quotation.Items)
+                if (quotation.CustomerId <= 0)
                 {
-                    item.Subtotal = item.Quantity * item.UnitPrice;
-                    total += item.Subtotal;
+                    return BadRequest(new { message = "請選擇有效的關聯客戶" });
                 }
+
+                if (string.IsNullOrWhiteSpace(quotation.Title))
+                {
+                    return BadRequest(new { message = "報價單名稱為必填項目" });
+                }
+
+                if (string.IsNullOrWhiteSpace(quotation.QuotationNumber))
+                {
+                    // Auto generate quotation number like QT-20260904-001
+                    string todayPrefix = $"QT-{DateTime.UtcNow:yyyyMMdd}";
+                    int countToday = await _context.Quotations.CountAsync(q => q.QuotationNumber.StartsWith(todayPrefix));
+                    quotation.QuotationNumber = $"{todayPrefix}-{(countToday + 1):D3}";
+                }
+
+                // Recalculate item subtotals and total amount
+                decimal total = 0;
+                if (quotation.Items != null)
+                {
+                    foreach (var item in quotation.Items)
+                    {
+                        item.Subtotal = item.Quantity * item.UnitPrice;
+                        total += item.Subtotal;
+                    }
+                }
+                quotation.TotalAmount = total;
+                if (quotation.IssueDate == default)
+                {
+                    quotation.IssueDate = DateTime.UtcNow;
+                }
+                quotation.CreatedAt = DateTime.UtcNow;
+
+                _context.Quotations.Add(quotation);
+                await _context.SaveChangesAsync();
+
+                return CreatedAtAction(nameof(GetQuotation), new { id = quotation.Id }, quotation);
             }
-            quotation.TotalAmount = total;
-            quotation.CreatedAt = DateTime.UtcNow;
-
-            _context.Quotations.Add(quotation);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetQuotation), new { id = quotation.Id }, quotation);
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "儲存報價單失敗: " + ex.Message });
+            }
         }
 
         // POST: api/Quotations/5/to-payment (Convert quotation final amount to payment record)
@@ -155,6 +176,16 @@ namespace Cozy.Controllers
                 return BadRequest(new { message = "ID 不符" });
             }
 
+            if (quotation.CustomerId <= 0)
+            {
+                return BadRequest(new { message = "請選擇有效的關聯客戶" });
+            }
+
+            if (string.IsNullOrWhiteSpace(quotation.Title))
+            {
+                return BadRequest(new { message = "報價單名稱為必填項目" });
+            }
+
             var existing = await _context.Quotations
                 .Include(q => q.Items)
                 .FirstOrDefaultAsync(q => q.Id == id);
@@ -164,9 +195,14 @@ namespace Cozy.Controllers
                 return NotFound(new { message = "找不到此報價單" });
             }
 
+            if (!string.IsNullOrWhiteSpace(quotation.QuotationNumber))
+            {
+                existing.QuotationNumber = quotation.QuotationNumber;
+            }
+
             existing.CustomerId = quotation.CustomerId;
             existing.Title = quotation.Title;
-            existing.IssueDate = quotation.IssueDate;
+            existing.IssueDate = quotation.IssueDate != default ? quotation.IssueDate : existing.IssueDate;
             existing.ExpiryDate = quotation.ExpiryDate;
             existing.Status = quotation.Status;
             existing.Notes = quotation.Notes;

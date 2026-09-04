@@ -96,62 +96,93 @@ namespace Cozy.Controllers
         [HttpPost]
         public async Task<ActionResult<WorkLog>> CreateWorkLog([FromBody] WorkLog workLog)
         {
-            if (string.IsNullOrWhiteSpace(workLog.Title))
+            try
             {
-                return BadRequest(new { message = "工作標題為必填項目" });
+                if (string.IsNullOrWhiteSpace(workLog.Title))
+                {
+                    return BadRequest(new { message = "工作標題為必填項目" });
+                }
+
+                if (workLog.ScheduledAt == default)
+                {
+                    workLog.ScheduledAt = DateTime.UtcNow;
+                }
+
+                workLog.CreatedAt = DateTime.UtcNow;
+                _context.WorkLogs.Add(workLog);
+                await _context.SaveChangesAsync();
+
+                return CreatedAtAction(nameof(GetWorkLog), new { id = workLog.Id }, workLog);
             }
-
-            workLog.CreatedAt = DateTime.UtcNow;
-            _context.WorkLogs.Add(workLog);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetWorkLog), new { id = workLog.Id }, workLog);
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "儲存工作記錄失敗: " + ex.Message });
+            }
         }
 
         // PATCH: api/WorkLogs/5/status
         [HttpPatch("{id}/status")]
         public async Task<IActionResult> UpdateStatus(int id, [FromBody] StatusUpdateDto dto)
         {
-            var existing = await _context.WorkLogs.FindAsync(id);
-            if (existing == null)
+            try
             {
-                return NotFound(new { message = "找不到此工作記錄" });
-            }
+                var existing = await _context.WorkLogs.FindAsync(id);
+                if (existing == null)
+                {
+                    return NotFound(new { message = "找不到此工作記錄" });
+                }
 
-            if (!string.IsNullOrWhiteSpace(dto.Status))
+                if (!string.IsNullOrWhiteSpace(dto.Status))
+                {
+                    existing.Status = dto.Status;
+                    await _context.SaveChangesAsync();
+                }
+
+                return Ok(existing);
+            }
+            catch (Exception ex)
             {
-                existing.Status = dto.Status;
-                await _context.SaveChangesAsync();
+                return StatusCode(500, new { message = "更新狀態失敗: " + ex.Message });
             }
-
-            return Ok(existing);
         }
 
         // PUT: api/WorkLogs/5
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateWorkLog(int id, [FromBody] WorkLog workLog)
         {
-            if (id != workLog.Id)
+            try
             {
-                return BadRequest(new { message = "ID 不符" });
-            }
+                if (id != workLog.Id)
+                {
+                    return BadRequest(new { message = "ID 不符" });
+                }
 
-            var existing = await _context.WorkLogs.FindAsync(id);
-            if (existing == null)
+                if (string.IsNullOrWhiteSpace(workLog.Title))
+                {
+                    return BadRequest(new { message = "工作標題為必填項目" });
+                }
+
+                var existing = await _context.WorkLogs.FindAsync(id);
+                if (existing == null)
+                {
+                    return NotFound(new { message = "找不到此工作記錄" });
+                }
+
+                existing.CustomerId = workLog.CustomerId;
+                existing.Title = workLog.Title;
+                existing.ScheduledAt = workLog.ScheduledAt != default ? workLog.ScheduledAt : existing.ScheduledAt;
+                existing.Status = workLog.Status;
+                existing.Details = workLog.Details;
+                existing.Location = workLog.Location;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(existing);
+            }
+            catch (Exception ex)
             {
-                return NotFound(new { message = "找不到此工作記錄" });
+                return StatusCode(500, new { message = "更新工作記錄失敗: " + ex.Message });
             }
-
-            existing.CustomerId = workLog.CustomerId;
-            existing.Title = workLog.Title;
-            existing.ScheduledAt = workLog.ScheduledAt;
-            existing.Status = workLog.Status;
-            existing.Details = workLog.Details;
-            existing.Location = workLog.Location;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(existing);
         }
 
         // DELETE: api/WorkLogs/5
