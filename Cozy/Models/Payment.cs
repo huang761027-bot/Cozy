@@ -19,6 +19,11 @@ namespace Cozy.Models
         [ForeignKey("QuotationId")]
         public Quotation? Quotation { get; set; }
 
+        public int? ProjectId { get; set; }
+
+        [ForeignKey("ProjectId")]
+        public Project? Project { get; set; }
+
         [Required(ErrorMessage = "收費項目說明為必填項目")]
         [MaxLength(200)]
         public string Title { get; set; } = string.Empty; // 例: "購買產品A", "尾款 $5000"

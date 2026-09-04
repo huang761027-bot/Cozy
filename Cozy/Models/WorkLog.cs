@@ -14,6 +14,11 @@ namespace Cozy.Models
         [ForeignKey("CustomerId")]
         public Customer? Customer { get; set; }
 
+        public int? ProjectId { get; set; }
+
+        [ForeignKey("ProjectId")]
+        public Project? Project { get; set; }
+
         [Required]
         [MaxLength(200)]
         public string Title { get; set; } = string.Empty;

@@ -2,7 +2,9 @@
 
 // Global Cache
 let customersCache = [];
+let projectsCache = [];
 let quotationsCache = [];
+let projectStagedFiles = [];
 
 // Service Worker for PWA
 if ('serviceWorker' in navigator) {
@@ -44,6 +46,15 @@ function formatDateTime(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   return d.toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+// Utility: File Size format
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 // Modal helper
@@ -90,6 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial Load
   loadDashboard();
   loadCustomers();
+  loadProjects();
 });
 
 function switchTab(tabName) {
@@ -108,6 +120,7 @@ function switchTab(tabName) {
   const titleConfigs = {
     dashboard: '<i class="fa-solid fa-chart-pie"></i> <span>總覽管理</span>',
     customers: '<i class="fa-solid fa-users"></i> <span>客戶資料</span>',
+    projects: '<i class="fa-solid fa-folder-open"></i> <span>專案案場</span>',
     worklogs: '<i class="fa-solid fa-calendar-check"></i> <span>工作行程</span>',
     quotations: '<i class="fa-solid fa-file-invoice-dollar"></i> <span>報價管理</span>',
     payments: '<i class="fa-solid fa-wallet"></i> <span>收費紀錄</span>'
@@ -119,6 +132,7 @@ function switchTab(tabName) {
 
   if (tabName === 'dashboard') loadDashboard();
   if (tabName === 'customers') loadCustomers();
+  if (tabName === 'projects') loadProjects();
   if (tabName === 'worklogs') loadWorkLogs();
   if (tabName === 'quotations') loadQuotations();
   if (tabName === 'payments') loadPayments();
@@ -278,8 +292,11 @@ async function loadCustomers() {
           </div>
         </div>
 
-        <!-- 選擇客戶 > 產生報價 / 產生收費 / 產生工作行程 -->
+        <!-- 選擇客戶 > 產生專案 / 產生報價 / 產生收費 / 產生工作行程 -->
         <div class="customer-action-btn-group">
+          <button class="btn btn-sm btn-action-project" onclick="triggerCustomerAction(${c.id}, 'project')">
+            <i class="fa-solid fa-folder-plus"></i> 建立專案案場
+          </button>
           <button class="btn btn-sm btn-action-quote" onclick="triggerCustomerAction(${c.id}, 'quote')">
             <i class="fa-solid fa-file-invoice-dollar"></i> 產生報價單
           </button>
@@ -298,7 +315,9 @@ async function loadCustomers() {
 }
 
 function triggerCustomerAction(customerId, actionType) {
-  if (actionType === 'quote') {
+  if (actionType === 'project') {
+    openProjectModal(null, customerId);
+  } else if (actionType === 'quote') {
     openQuotationModal(null, customerId);
   } else if (actionType === 'pay') {
     openPaymentModal(null, customerId);
@@ -309,6 +328,22 @@ function triggerCustomerAction(customerId, actionType) {
 
 function populateCustomerDropdowns() {
   const optionsHtml = customersCache.map(c => `<option value="${c.id}">[${c.category || '個人'}] ${c.name} (${c.phone})</option>`).join('');
+
+  // Project Modal Customer
+  const projectCustSelect = document.getElementById('project-customer-id');
+  if (projectCustSelect) {
+    const cur = projectCustSelect.value;
+    projectCustSelect.innerHTML = '<option value="">-- 請選擇客戶 --</option>' + optionsHtml;
+    if (cur) projectCustSelect.value = cur;
+  }
+
+  // Project Customer Filter in view-projects
+  const projectFilterSelect = document.getElementById('project-customer-filter');
+  if (projectFilterSelect) {
+    const cur = projectFilterSelect.value;
+    projectFilterSelect.innerHTML = '<option value="">全部客戶/設計師/公司</option>' + optionsHtml;
+    if (cur) projectFilterSelect.value = cur;
+  }
 
   // Worklogs
   const worklogSelect = document.getElementById('worklog-customer');
@@ -340,6 +375,62 @@ function populateCustomerDropdowns() {
     const cur = quickSelect.value;
     quickSelect.innerHTML = '<option value="">-- 散客 / 現場購買 (不記客戶) --</option>' + optionsHtml;
     if (cur) quickSelect.value = cur;
+  }
+
+  populateProjectDropdowns();
+}
+
+function populateProjectDropdowns() {
+  const projectOptionsHtml = projectsCache.map(p => 
+    `<option value="${p.id}">[${p.projectNumber}] ${p.name}</option>`
+  ).join('');
+
+  const worklogProjSelect = document.getElementById('worklog-project');
+  if (worklogProjSelect) {
+    const cur = worklogProjSelect.value;
+    worklogProjSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + projectOptionsHtml;
+    if (cur) worklogProjSelect.value = cur;
+  }
+
+  const quoteProjSelect = document.getElementById('quotation-project');
+  if (quoteProjSelect) {
+    const cur = quoteProjSelect.value;
+    quoteProjSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + projectOptionsHtml;
+    if (cur) quoteProjSelect.value = cur;
+  }
+
+  const payProjSelect = document.getElementById('payment-project');
+  if (payProjSelect) {
+    const cur = payProjSelect.value;
+    payProjSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + projectOptionsHtml;
+    if (cur) payProjSelect.value = cur;
+  }
+}
+
+function filterWorkLogProjects() {
+  const custId = document.getElementById('worklog-customer').value;
+  const filtered = custId ? projectsCache.filter(p => p.customerId == custId) : projectsCache;
+  const projSelect = document.getElementById('worklog-project');
+  if (projSelect) {
+    projSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + filtered.map(p => `<option value="${p.id}">[${p.projectNumber}] ${p.name}</option>`).join('');
+  }
+}
+
+function filterQuotationProjects() {
+  const custId = document.getElementById('quotation-customer').value;
+  const filtered = custId ? projectsCache.filter(p => p.customerId == custId) : projectsCache;
+  const projSelect = document.getElementById('quotation-project');
+  if (projSelect) {
+    projSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + filtered.map(p => `<option value="${p.id}">[${p.projectNumber}] ${p.name}</option>`).join('');
+  }
+}
+
+function filterPaymentProjects() {
+  const custId = document.getElementById('payment-customer').value;
+  const filtered = custId ? projectsCache.filter(p => p.customerId == custId) : projectsCache;
+  const projSelect = document.getElementById('payment-project');
+  if (projSelect) {
+    projSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + filtered.map(p => `<option value="${p.id}">[${p.projectNumber}] ${p.name}</option>`).join('');
   }
 }
 
@@ -431,7 +522,372 @@ async function deleteCustomer(id, name) {
   }
 }
 
-// ==================== 3. 工作行程 (WORKLOGS) ====================
+// ==================== 專案/案場管理 (PROJECTS) ====================
+async function loadProjects() {
+  const searchEl = document.getElementById('project-search');
+  const custEl = document.getElementById('project-customer-filter');
+  const statusEl = document.getElementById('project-status-filter');
+
+  const search = searchEl ? searchEl.value : '';
+  const customerId = custEl ? custEl.value : '';
+  const status = statusEl ? statusEl.value : '';
+
+  try {
+    const res = await fetch(`/api/projects?search=${encodeURIComponent(search || '')}&customerId=${encodeURIComponent(customerId || '')}&status=${encodeURIComponent(status || '')}`);
+    const data = await res.json();
+    projectsCache = data;
+
+    populateProjectDropdowns();
+
+    const listEl = document.getElementById('projects-list');
+    if (!listEl) return;
+
+    if (data.length === 0) {
+      listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 40px;">尚無專案/案場資料，點擊右上角「新增專案/案場」或至客戶資料中點擊「建立專案案場」</p>';
+      return;
+    }
+
+    listEl.innerHTML = data.map(p => `
+      <div class="list-item-card">
+        <div class="list-item-top">
+          <div class="list-item-info">
+            <div class="list-item-title" style="flex-wrap: wrap; gap: 6px;">
+              <span class="project-number-badge"><i class="fa-solid fa-hashtag"></i> ${p.projectNumber}</span>
+              <span style="font-size: 17px; font-weight: 800; color: #1e293b;">${p.name}</span>
+              <span class="badge ${getProjectStatusBadgeClass(p.status)}">${p.status}</span>
+              <span class="badge ${getCategoryBadgeClass(p.customerCategory)}"><i class="fa-solid fa-user"></i> ${p.customerName}</span>
+            </div>
+            <div class="list-item-sub" style="margin-top: 6px;">
+              ${p.customerPhone ? `<span><i class="fa-solid fa-phone" style="color: var(--primary);"></i> ${p.customerPhone}</span>` : ''}
+              ${p.contactPerson ? `<span><i class="fa-solid fa-user-gear"></i> 現場窗口: <b>${p.contactPerson}</b> ${p.contactPhone || ''}</span>` : ''}
+              ${p.address ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${p.address}</span>` : ''}
+              ${p.budget ? `<span style="color: var(--success); font-weight: 700;"><i class="fa-solid fa-sack-dollar"></i> 預算: ${formatCurrency(p.budget)}</span>` : ''}
+              ${p.startDate ? `<span><i class="fa-regular fa-calendar"></i> 進場: ${formatDate(p.startDate)}</span>` : ''}
+            </div>
+            ${p.notes ? `<div style="font-size: 13px; color: #475569; margin-top: 6px; background: #f8fafc; border-left: 3px solid #6366f1; padding: 6px 10px; border-radius: 4px;"><i class="fa-regular fa-clipboard"></i> <b>施工規範/備註:</b> ${p.notes}</div>` : ''}
+            
+            <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+              <span class="badge ${p.fileCount > 0 ? 'badge-info' : 'badge-gray'}" style="font-size: 12px; cursor: pointer;" onclick="openProjectFilesModal(${p.id})">
+                <i class="fa-solid fa-paperclip"></i> ${p.fileCount > 0 ? `附件檔案 (${p.fileCount})` : '尚無附件'}
+              </span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-sm btn-action-files" onclick="openProjectFilesModal(${p.id})" title="管理附件與圖檔"><i class="fa-solid fa-paperclip"></i> 檔案庫 (${p.fileCount})</button>
+            <button class="btn btn-sm btn-secondary" onclick="editProject(${p.id})" title="編輯專案"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn btn-sm btn-danger" onclick="deleteProject(${p.id}, '${p.name}')" title="刪除"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
+
+        <div class="customer-action-btn-group">
+          <button class="btn btn-sm btn-action-files" onclick="openProjectFilesModal(${p.id})">
+            <i class="fa-solid fa-cloud-arrow-up"></i> 上傳/檢視附件 (${p.fileCount})
+          </button>
+          <button class="btn btn-sm btn-action-quote" onclick="openQuotationModal(null, ${p.customerId}, ${p.id})">
+            <i class="fa-solid fa-file-invoice-dollar"></i> 開立專案報價單
+          </button>
+          <button class="btn btn-sm btn-action-log" onclick="openWorkLogModal(null, ${p.customerId}, ${p.id})">
+            <i class="fa-solid fa-calendar-plus"></i> 排定專案行程
+          </button>
+          <button class="btn btn-sm btn-action-pay" onclick="openPaymentModal(null, ${p.customerId}, ${p.id})">
+            <i class="fa-solid fa-wallet"></i> 專案收費紀錄
+          </button>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('Error loading projects:', err);
+  }
+}
+
+function openProjectModal(id = null, preSelectCustomerId = null) {
+  document.getElementById('project-id').value = id || '';
+  document.getElementById('modal-project-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯專案 / 案場' : '<i class="fa-solid fa-folder-plus" style="color: var(--primary);"></i> 新增專案 / 案場';
+  populateCustomerDropdowns();
+
+  const custSelect = document.getElementById('project-customer-id');
+  if (preSelectCustomerId) {
+    custSelect.value = preSelectCustomerId;
+  } else if (!id) {
+    custSelect.value = '';
+  }
+
+  if (!id) {
+    document.getElementById('project-number').value = '';
+    document.getElementById('project-name').value = '';
+    document.getElementById('project-status').value = '進行中';
+    document.getElementById('project-contact-person').value = '';
+    document.getElementById('project-contact-phone').value = '';
+    document.getElementById('project-address').value = '';
+    document.getElementById('project-budget').value = '';
+    document.getElementById('project-start-date').value = '';
+    document.getElementById('project-end-date').value = '';
+    document.getElementById('project-notes').value = '';
+  }
+
+  openModal('modal-project');
+}
+
+async function editProject(id) {
+  const res = await fetch(`/api/projects/${id}`);
+  if (!res.ok) {
+    alert('找不到此專案');
+    return;
+  }
+  const p = await res.json();
+
+  document.getElementById('project-id').value = p.id;
+  document.getElementById('modal-project-title').innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯專案 / 案場';
+  populateCustomerDropdowns();
+
+  document.getElementById('project-customer-id').value = p.customerId;
+  document.getElementById('project-number').value = p.projectNumber || '';
+  document.getElementById('project-name').value = p.name || '';
+  document.getElementById('project-status').value = p.status || '進行中';
+  document.getElementById('project-contact-person').value = p.contactPerson || '';
+  document.getElementById('project-contact-phone').value = p.contactPhone || '';
+  document.getElementById('project-address').value = p.address || '';
+  document.getElementById('project-budget').value = p.budget !== null ? p.budget : '';
+  document.getElementById('project-start-date').value = p.startDate ? p.startDate.substring(0, 10) : '';
+  document.getElementById('project-end-date').value = p.endDate ? p.endDate.substring(0, 10) : '';
+  document.getElementById('project-notes').value = p.notes || '';
+
+  openModal('modal-project');
+}
+
+async function saveProject() {
+  const id = document.getElementById('project-id').value;
+  const name = document.getElementById('project-name').value.trim();
+  const customerId = parseInt(document.getElementById('project-customer-id').value);
+
+  if (!name) {
+    alert('請填寫專案 / 案場名稱');
+    return;
+  }
+
+  if (!customerId || customerId <= 0) {
+    alert('請選擇關聯客戶 / 設計師 / 公司');
+    return;
+  }
+
+  const budgetVal = document.getElementById('project-budget').value;
+  const startDateVal = document.getElementById('project-start-date').value;
+  const endDateVal = document.getElementById('project-end-date').value;
+
+  const payload = {
+    id: id ? parseInt(id) : 0,
+    projectNumber: document.getElementById('project-number').value.trim(),
+    name,
+    customerId,
+    status: document.getElementById('project-status').value || '進行中',
+    contactPerson: document.getElementById('project-contact-person').value.trim(),
+    contactPhone: document.getElementById('project-contact-phone').value.trim(),
+    address: document.getElementById('project-address').value.trim(),
+    budget: budgetVal ? parseFloat(budgetVal) : null,
+    startDate: startDateVal ? new Date(startDateVal).toISOString() : null,
+    endDate: endDateVal ? new Date(endDateVal).toISOString() : null,
+    notes: document.getElementById('project-notes').value.trim()
+  };
+
+  const method = id ? 'PUT' : 'POST';
+  const url = id ? `/api/projects/${id}` : '/api/projects';
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      closeModal('modal-project');
+      loadProjects();
+      loadDashboard();
+    } else {
+      const errMsg = await parseErrorMessage(res, '請檢查輸入欄位');
+      alert(`儲存專案失敗：${errMsg}`);
+    }
+  } catch (err) {
+    alert(`儲存專案時發生網路錯誤：${err.message || err}`);
+  }
+}
+
+async function deleteProject(id, name) {
+  if (!confirm(`確定要刪除專案「${name}」嗎？這將同時刪除該專案所有已上傳的檔案與圖檔。`)) return;
+  const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+  if (res.ok) {
+    loadProjects();
+    loadDashboard();
+  } else {
+    const errMsg = await parseErrorMessage(res, '刪除失敗');
+    alert(`刪除專案失敗：${errMsg}`);
+  }
+}
+
+// 專案檔案附件庫
+function getFileIconInfo(fileName, fileType) {
+  const ext = (fileType || '').toLowerCase() || (fileName.slice((fileName.lastIndexOf(".") - 1 >>> 0) + 2)).toLowerCase();
+  if (['.docx', '.doc', 'docx', 'doc'].includes(ext)) {
+    return { icon: 'fa-solid fa-file-word', className: 'icon-word', label: 'Word 文件' };
+  }
+  if (['.pdf', 'pdf'].includes(ext)) {
+    return { icon: 'fa-solid fa-file-pdf', className: 'icon-pdf', label: 'PDF 文件' };
+  }
+  if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', 'jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+    return { icon: 'fa-solid fa-file-image', className: 'icon-image', label: '圖片/設計圖' };
+  }
+  if (['.xlsx', '.xls', '.csv', 'xlsx', 'xls', 'csv'].includes(ext)) {
+    return { icon: 'fa-solid fa-file-excel', className: 'icon-excel', label: 'Excel 試算表' };
+  }
+  return { icon: 'fa-solid fa-file-lines', className: 'icon-generic', label: '檔案' };
+}
+
+async function openProjectFilesModal(projectId) {
+  document.getElementById('current-project-files-id').value = projectId;
+  projectStagedFiles = [];
+  document.getElementById('selected-files-preview').style.display = 'none';
+  document.getElementById('project-files-input').value = '';
+
+  try {
+    const res = await fetch(`/api/projects/${projectId}`);
+    if (!res.ok) {
+      alert('無法載入專案資料');
+      return;
+    }
+    const p = await res.json();
+
+    document.getElementById('modal-project-files-title').innerHTML = `<i class="fa-solid fa-folder-open" style="color: var(--primary);"></i> 檔案附件庫 - ${p.name}`;
+    document.getElementById('modal-project-files-sub').innerText = `專案編號: ${p.projectNumber || '無'} | 關聯客戶: ${p.customer ? p.customer.name : '未指定'}`;
+    document.getElementById('project-files-total-badge').innerText = p.files ? p.files.length : 0;
+
+    renderAttachedFilesList(p.files || []);
+    openModal('modal-project-files');
+  } catch (err) {
+    alert('載入專案附件時發生錯誤：' + err);
+  }
+}
+
+function renderAttachedFilesList(files) {
+  const container = document.getElementById('project-attached-files-list');
+  if (!files || files.length === 0) {
+    container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">尚無附件檔案，點擊上方區域即可上傳 Word、PDF、設計圖或施工照片</p>';
+    return;
+  }
+
+  container.innerHTML = files.map(f => {
+    const iconInfo = getFileIconInfo(f.fileName, f.fileType);
+    return `
+      <div class="attached-file-item">
+        <div class="file-type-icon ${iconInfo.className}">
+          <i class="${iconInfo.icon}"></i>
+        </div>
+        <div class="file-item-info">
+          <div class="file-item-name" title="${f.fileName}">${f.fileName}</div>
+          <div class="file-item-meta">
+            <span><i class="fa-solid fa-tag"></i> ${iconInfo.label}</span>
+            <span><i class="fa-solid fa-hard-drive"></i> ${formatFileSize(f.fileSizeBytes)}</span>
+            <span><i class="fa-regular fa-clock"></i> ${formatDateTime(f.uploadedAt)}</span>
+          </div>
+        </div>
+        <div class="file-item-actions">
+          <a href="/api/projects/files/${f.id}/download" target="_blank" download="${f.fileName}" class="btn-file-dl" title="下載或檢視檔案">
+            <i class="fa-solid fa-download"></i> 檢視/下載
+          </a>
+          <button class="btn-file-del" onclick="deleteProjectFile(${f.id}, '${f.fileName}')" title="刪除此檔案">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function handleProjectFilesSelect(event) {
+  const input = event.target;
+  if (!input.files || input.files.length === 0) return;
+
+  projectStagedFiles = Array.from(input.files);
+  const previewBox = document.getElementById('selected-files-preview');
+  const countSpan = document.getElementById('selected-files-count');
+  const listDiv = document.getElementById('selected-files-list');
+
+  countSpan.innerText = `已選擇 ${projectStagedFiles.length} 個檔案`;
+  listDiv.innerHTML = projectStagedFiles.map(f => `
+    <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+      <span>📄 <b>${f.name}</b></span>
+      <span style="color: #64748b;">${formatFileSize(f.size)}</span>
+    </div>
+  `).join('');
+
+  previewBox.style.display = 'block';
+}
+
+async function uploadProjectFiles() {
+  const projectId = document.getElementById('current-project-files-id').value;
+  if (!projectId || projectStagedFiles.length === 0) {
+    alert('請先選擇要上傳的檔案');
+    return;
+  }
+
+  const btn = document.getElementById('btn-upload-project-files');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 上傳中...';
+
+  const formData = new FormData();
+  for (const file of projectStagedFiles) {
+    formData.append('files', file);
+  }
+
+  try {
+    const res = await fetch(`/api/projects/${projectId}/files`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (res.ok) {
+      projectStagedFiles = [];
+      document.getElementById('selected-files-preview').style.display = 'none';
+      document.getElementById('project-files-input').value = '';
+      
+      // Reload project files
+      const pRes = await fetch(`/api/projects/${projectId}`);
+      const pData = await pRes.json();
+      document.getElementById('project-files-total-badge').innerText = pData.files ? pData.files.length : 0;
+      renderAttachedFilesList(pData.files || []);
+      loadProjects();
+    } else {
+      const errMsg = await parseErrorMessage(res, '上傳失敗');
+      alert(`檔案上傳失敗：${errMsg}`);
+    }
+  } catch (err) {
+    alert(`上傳檔案時發生網路錯誤：${err.message || err}`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-arrow-up-from-bracket"></i> 開始上傳';
+  }
+}
+
+async function deleteProjectFile(fileId, fileName) {
+  if (!confirm(`確定要刪除檔案「${fileName}」嗎？`)) return;
+
+  const projectId = document.getElementById('current-project-files-id').value;
+  try {
+    const res = await fetch(`/api/projects/files/${fileId}`, { method: 'DELETE' });
+    if (res.ok) {
+      const pRes = await fetch(`/api/projects/${projectId}`);
+      const pData = await pRes.json();
+      document.getElementById('project-files-total-badge').innerText = pData.files ? pData.files.length : 0;
+      renderAttachedFilesList(pData.files || []);
+      loadProjects();
+    } else {
+      alert('刪除檔案失敗');
+    }
+  } catch (err) {
+    alert('刪除檔案時發生錯誤：' + err);
+  }
+}
+
+// ==================== 4. 工作行程 (WORKLOGS) ====================
 async function loadWorkLogs() {
   const search = document.getElementById('worklog-search').value;
   const status = document.getElementById('worklog-status-filter').value;
@@ -498,7 +954,7 @@ async function changeWorkLogStatus(id, newStatus) {
   }
 }
 
-function openWorkLogModal(id = null, preSelectCustomerId = null) {
+function openWorkLogModal(id = null, preSelectCustomerId = null, preSelectProjectId = null) {
   document.getElementById('worklog-id').value = id || '';
   document.getElementById('modal-worklog-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯工作行程' : '<i class="fa-solid fa-calendar-plus" style="color: var(--primary);"></i> 排定工作行程';
   populateCustomerDropdowns();
@@ -510,10 +966,16 @@ function openWorkLogModal(id = null, preSelectCustomerId = null) {
     customerSelect.value = preSelectCustomerId;
     customerSelect.disabled = true;
     if (lockedHint) lockedHint.style.display = 'inline';
+    filterWorkLogProjects();
   } else {
     customerSelect.disabled = false;
     if (lockedHint) lockedHint.style.display = 'none';
     if (!id) customerSelect.value = '';
+  }
+
+  if (preSelectProjectId) {
+    const projSelect = document.getElementById('worklog-project');
+    if (projSelect) projSelect.value = preSelectProjectId;
   }
 
   if (!id) {
@@ -524,6 +986,10 @@ function openWorkLogModal(id = null, preSelectCustomerId = null) {
     document.getElementById('worklog-status').value = '待處理';
     document.getElementById('worklog-is-priority').checked = false;
     document.getElementById('worklog-details').value = '';
+    if (!preSelectProjectId) {
+      const projSelect = document.getElementById('worklog-project');
+      if (projSelect) projSelect.value = '';
+    }
   }
   openModal('modal-worklog');
 }
@@ -543,6 +1009,10 @@ async function editWorkLog(id) {
   const lockedHint = document.getElementById('worklog-customer-locked-hint');
   if (lockedHint) lockedHint.style.display = 'none';
 
+  filterWorkLogProjects();
+  const projSelect = document.getElementById('worklog-project');
+  if (projSelect) projSelect.value = w.projectId || '';
+
   document.getElementById('worklog-title-input').value = w.title || '';
   document.getElementById('worklog-time').value = w.scheduledAt ? w.scheduledAt.substring(0, 16) : '';
   document.getElementById('worklog-location').value = w.location || '';
@@ -558,6 +1028,7 @@ async function saveWorkLog() {
   const title = document.getElementById('worklog-title-input').value.trim();
   const scheduledAt = document.getElementById('worklog-time').value;
   const customerIdVal = document.getElementById('worklog-customer').value;
+  const projectIdVal = document.getElementById('worklog-project') ? document.getElementById('worklog-project').value : null;
 
   if (!title) {
     alert('請填寫工作標題');
@@ -567,6 +1038,7 @@ async function saveWorkLog() {
   const payload = {
     id: id ? parseInt(id) : 0,
     customerId: customerIdVal ? parseInt(customerIdVal) : null,
+    projectId: projectIdVal ? parseInt(projectIdVal) : null,
     title,
     scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : new Date().toISOString(),
     location: document.getElementById('worklog-location').value.trim(),
@@ -746,7 +1218,7 @@ async function convertQuotationToPayment(quotationId, title, amount) {
   }
 }
 
-function openQuotationModal(id = null, preSelectCustomerId = null) {
+function openQuotationModal(id = null, preSelectCustomerId = null, preSelectProjectId = null) {
   document.getElementById('quotation-id').value = id || '';
   document.getElementById('modal-quotation-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯報價單' : '<i class="fa-solid fa-file-circle-plus" style="color: var(--primary);"></i> 建立報價單';
   document.getElementById('quotation-number').value = '';
@@ -763,9 +1235,18 @@ function openQuotationModal(id = null, preSelectCustomerId = null) {
     customerSelect.value = preSelectCustomerId;
     customerSelect.disabled = true;
     if (lockedHint) lockedHint.style.display = 'inline';
+    filterQuotationProjects();
   } else {
     customerSelect.disabled = false;
     if (lockedHint) lockedHint.style.display = 'none';
+  }
+
+  if (preSelectProjectId) {
+    const projSelect = document.getElementById('quotation-project');
+    if (projSelect) projSelect.value = preSelectProjectId;
+  } else if (!id) {
+    const projSelect = document.getElementById('quotation-project');
+    if (projSelect) projSelect.value = '';
   }
 
   const container = document.getElementById('quotation-items-container');
@@ -826,7 +1307,6 @@ function updateQuotationItemIndices() {
 function calculateQuotationTotal() {
   const cards = document.querySelectorAll('#quotation-items-container .quotation-item-card');
   let grandTotal = 0;
-
   cards.forEach(card => {
     const qty = parseFloat(card.querySelector('.item-qty').value) || 0;
     const price = parseFloat(card.querySelector('.item-price').value) || 0;
@@ -848,6 +1328,7 @@ async function saveQuotation() {
   const id = document.getElementById('quotation-id').value;
   const customerSelect = document.getElementById('quotation-customer');
   const customerId = customerSelect.value;
+  const projectIdVal = document.getElementById('quotation-project') ? document.getElementById('quotation-project').value : null;
   const title = document.getElementById('quotation-title-input').value.trim();
 
   if (!customerId) {
@@ -885,6 +1366,7 @@ async function saveQuotation() {
     id: id ? parseInt(id) : 0,
     quotationNumber: document.getElementById('quotation-number').value.trim(),
     customerId: parseInt(customerId),
+    projectId: projectIdVal ? parseInt(projectIdVal) : null,
     title,
     issueDate: issueDateVal ? new Date(issueDateVal).toISOString() : new Date().toISOString(),
     status: document.getElementById('quotation-status').value,
@@ -929,6 +1411,10 @@ async function editQuotation(id) {
   customerSelect.value = q.customerId;
   const lockedHint = document.getElementById('quotation-customer-locked-hint');
   if (lockedHint) lockedHint.style.display = 'none';
+
+  filterQuotationProjects();
+  const projSelect = document.getElementById('quotation-project');
+  if (projSelect) projSelect.value = q.projectId || '';
 
   document.getElementById('quotation-title-input').value = q.title || '';
   document.getElementById('quotation-date').value = q.issueDate ? q.issueDate.slice(0, 10) : '';
@@ -1070,7 +1556,7 @@ async function loadPayments() {
   }
 }
 
-function openPaymentModal(id = null, preSelectCustomerId = null) {
+function openPaymentModal(id = null, preSelectCustomerId = null, preSelectProjectId = null) {
   document.getElementById('payment-id').value = id || '';
   document.getElementById('modal-payment-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--success);"></i> 編輯收費紀錄' : '<i class="fa-solid fa-plus" style="color: var(--success);"></i> 新增收費紀錄 (購買單一產品/收款)';
   populateCustomerDropdowns();
@@ -1086,12 +1572,21 @@ function openPaymentModal(id = null, preSelectCustomerId = null) {
     lockedInput.value = preSelectCustomerId;
     if (lockedHint) lockedHint.style.display = 'inline';
     if (optionalHint) optionalHint.style.display = 'none';
+    filterPaymentProjects();
   } else {
     customerSelect.disabled = false;
     lockedInput.value = '';
     if (lockedHint) lockedHint.style.display = 'none';
     if (optionalHint) optionalHint.style.display = 'inline';
     if (!id) customerSelect.value = '';
+  }
+
+  if (preSelectProjectId) {
+    const projSelect = document.getElementById('payment-project');
+    if (projSelect) projSelect.value = preSelectProjectId;
+  } else if (!id) {
+    const projSelect = document.getElementById('payment-project');
+    if (projSelect) projSelect.value = '';
   }
 
   clearInvoiceImage();
@@ -1127,6 +1622,10 @@ async function editPayment(id) {
   if (lockedHint) lockedHint.style.display = 'none';
   if (optionalHint) optionalHint.style.display = 'inline';
 
+  filterPaymentProjects();
+  const projSelect = document.getElementById('payment-project');
+  if (projSelect) projSelect.value = p.projectId || '';
+
   document.getElementById('payment-title-input').value = p.title || '';
   document.getElementById('payment-amount').value = p.amount;
   document.getElementById('payment-date').value = p.paymentDate ? p.paymentDate.slice(0, 10) : '';
@@ -1154,6 +1653,7 @@ async function savePayment() {
   const id = document.getElementById('payment-id').value;
   const lockedId = document.getElementById('payment-locked-customer-id').value;
   const customerIdVal = lockedId || document.getElementById('payment-customer').value;
+  const projectIdVal = document.getElementById('payment-project') ? document.getElementById('payment-project').value : null;
   const title = document.getElementById('payment-title-input').value.trim();
   const amount = parseFloat(document.getElementById('payment-amount').value);
 
@@ -1170,6 +1670,7 @@ async function savePayment() {
   const payload = {
     id: id ? parseInt(id) : 0,
     customerId: customerIdVal ? parseInt(customerIdVal) : null,
+    projectId: projectIdVal ? parseInt(projectIdVal) : null,
     title,
     amount,
     paymentDate: paymentDateVal ? new Date(paymentDateVal).toISOString() : new Date().toISOString(),
@@ -1518,4 +2019,12 @@ function getQuotationBadgeClass(status) {
   if (status === '已發送') return 'badge-info';
   if (status === '草稿') return 'badge-gray';
   return 'badge-warning';
+}
+
+function getProjectStatusBadgeClass(status) {
+  if (status === '已完工' || status === '已結案') return 'badge-success';
+  if (status === '進行中') return 'badge-info';
+  if (status === '待進場') return 'badge-warning';
+  if (status === '暫停') return 'badge-danger';
+  return 'badge-gray';
 }

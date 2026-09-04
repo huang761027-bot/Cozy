@@ -36,6 +36,10 @@
         <i class="fa-solid fa-users"></i>
         <span>客戶資料</span>
       </a>
+      <a class="nav-item" data-tab="projects">
+        <i class="fa-solid fa-folder-open"></i>
+        <span>專案案場</span>
+      </a>
       <a class="nav-item" data-tab="worklogs">
         <i class="fa-solid fa-calendar-check"></i>
         <span>工作行程</span>
@@ -146,10 +150,9 @@
         </div>
         <select id="customer-category-filter" class="select-input" onchange="loadCustomers()">
           <option value="">全部分類</option>
+          <option value="個人">個人</option>
           <option value="設計師">設計師</option>
           <option value="公司">公司</option>
-          <option value="個人">個人</option>
-          <option value="專案">專案</option>
           <option value="其他">其他</option>
         </select>
         <button class="btn btn-primary" onclick="openCustomerModal()">
@@ -158,6 +161,33 @@
       </div>
       <div id="customers-list" class="item-list">
         <!-- Customer cards rendered by JS -->
+      </div>
+    </section>
+
+    <!-- SECTION: 專案案場 (Projects) -->
+    <section id="view-projects" class="content-view" style="display: none;">
+      <div class="filter-bar">
+        <div class="search-input-wrapper">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="project-search" class="search-input" placeholder="搜尋專案編號、案場名稱、客戶姓名、地址、備註..." oninput="debounce(loadProjects, 300)()">
+        </div>
+        <select id="project-customer-filter" class="select-input" onchange="loadProjects()">
+          <option value="">全部客戶/設計師/公司</option>
+        </select>
+        <select id="project-status-filter" class="select-input" onchange="loadProjects()">
+          <option value="">全部狀態</option>
+          <option value="進行中">進行中</option>
+          <option value="待進場">待進場</option>
+          <option value="已完工">已完工</option>
+          <option value="已結案">已結案</option>
+          <option value="暫停">暫停</option>
+        </select>
+        <button class="btn btn-primary" onclick="openProjectModal()">
+          <i class="fa-solid fa-folder-plus"></i> 新增專案/案場
+        </button>
+      </div>
+      <div id="projects-list" class="item-list">
+        <!-- Projects rendered by JS -->
       </div>
     </section>
 
@@ -239,6 +269,10 @@
       <i class="fa-solid fa-users icon"></i>
       <span>客戶</span>
     </a>
+    <a class="mobile-nav-item" data-tab="projects">
+      <i class="fa-solid fa-folder-open icon"></i>
+      <span>專案</span>
+    </a>
     <a class="mobile-nav-item" data-tab="worklogs">
       <i class="fa-solid fa-calendar-check icon"></i>
       <span>行程</span>
@@ -277,10 +311,9 @@
         <div class="form-group">
           <label>客戶分類 <span style="color:red">*</span></label>
           <select id="customer-category" class="select-input">
+            <option value="個人" selected>個人</option>
             <option value="設計師">設計師</option>
             <option value="公司">公司</option>
-            <option value="個人" selected>個人</option>
-            <option value="專案">專案</option>
             <option value="其他">其他</option>
           </select>
         </div>
@@ -328,6 +361,145 @@
   </div>
 </div>
 
+<!-- Project Modal (新增 / 編輯專案案場) -->
+<div id="modal-project" class="modal-backdrop" style="display: none;">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-project-title"><i class="fa-solid fa-folder-plus" style="color: var(--primary);"></i> 新增專案 / 案場</h3>
+      <button class="close-btn" onclick="closeModal('modal-project')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="project-id">
+      
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px;">
+        <div class="form-group">
+          <label>專案編號 <span style="font-size:12px; color:var(--text-muted); font-weight:normal;">(例: PRJ-001 或留空自動編號)</span></label>
+          <input type="text" id="project-number" class="form-input" placeholder="例: PRJ-001">
+        </div>
+        <div class="form-group">
+          <label>專案 / 案場名稱 <span style="color:red">* (必填)</span></label>
+          <div class="input-mic-group">
+            <input type="text" id="project-name" class="form-input" placeholder="例: 澄品設計 - 大安森林公園住宅案" required>
+            <button type="button" class="btn-mic" onclick="startFieldVoiceInput('project-name', this)" title="語音輸入"><i class="fa-solid fa-microphone"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>關聯客戶 / 設計師 / 公司 <span style="color:red">* (必選)</span></label>
+          <select id="project-customer-id" class="select-input" required>
+            <option value="">-- 請選擇客戶 --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>專案狀態 <span style="color:red">*</span></label>
+          <select id="project-status" class="select-input">
+            <option value="進行中" selected>進行中</option>
+            <option value="待進場">待進場</option>
+            <option value="已完工">已完工</option>
+            <option value="已結案">已結案</option>
+            <option value="暫停">暫停</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>現場聯絡人 / 監工</label>
+          <input type="text" id="project-contact-person" class="form-input" placeholder="例: 陳主任 / 施工窗口">
+        </div>
+        <div class="form-group">
+          <label>現場聯絡電話</label>
+          <input type="tel" id="project-contact-phone" class="form-input" placeholder="例: 0912-345-678">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>案場地址 / 施工地點</label>
+        <div class="input-mic-group">
+          <input type="text" id="project-address" class="form-input" placeholder="例: 台北市大安區忠孝東路四段...">
+          <button type="button" class="btn-mic" onclick="startFieldVoiceInput('project-address', this)" title="語音輸入"><i class="fa-solid fa-microphone"></i></button>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>預算 / 預估金額 ($)</label>
+          <input type="number" id="project-budget" class="form-input" placeholder="0" min="0" step="1">
+        </div>
+        <div class="form-group">
+          <label>預計進場日</label>
+          <input type="date" id="project-start-date" class="form-input">
+        </div>
+        <div class="form-group">
+          <label>預計完工日</label>
+          <input type="date" id="project-end-date" class="form-input">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>備註事項 / 施工規範 / 門鎖密碼</label>
+        <div class="input-mic-group" style="align-items: flex-start;">
+          <textarea id="project-notes" class="form-textarea" rows="2" placeholder="備註大樓換證規定、大門密碼、防護要求、特殊工法..."></textarea>
+          <button type="button" class="btn-mic" onclick="startFieldVoiceInput('project-notes', this)" title="語音輸入" style="margin-top: 2px;"><i class="fa-solid fa-microphone"></i></button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-project')">取消</button>
+      <button class="btn btn-primary" onclick="saveProject()"><i class="fa-solid fa-check"></i> 儲存專案案場</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project Files Modal (專案檔案附件庫 - 支援 Word, PDF, 圖檔, Excel 等) -->
+<div id="modal-project-files" class="modal-backdrop" style="display: none;">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div>
+        <h3 class="modal-title" id="modal-project-files-title"><i class="fa-solid fa-folder-open" style="color: var(--primary);"></i> 專案檔案附件庫</h3>
+        <p id="modal-project-files-sub" style="font-size: 13px; color: var(--text-muted); margin-top: 2px;"></p>
+      </div>
+      <button class="close-btn" onclick="closeModal('modal-project-files')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="current-project-files-id">
+      
+      <!-- Upload Zone -->
+      <div class="file-upload-dropzone" onclick="document.getElementById('project-files-input').click()">
+        <i class="fa-solid fa-cloud-arrow-up dropzone-icon"></i>
+        <div class="dropzone-text">點擊或拖曳檔案至此上傳</div>
+        <div class="dropzone-hint">支援 Word (.docx/.doc)、PDF、施工圖/設計圖 (JPG/PNG/WebP)、Excel (.xlsx) 等</div>
+        <input type="file" id="project-files-input" multiple style="display: none;" onchange="handleProjectFilesSelect(event)">
+      </div>
+
+      <div id="selected-files-preview" style="display: none; margin-top: 12px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 13px; font-weight: 700; color: #334155;" id="selected-files-count">已選擇 0 個檔案</span>
+          <button class="btn btn-sm btn-primary" id="btn-upload-project-files" onclick="uploadProjectFiles()">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i> 開始上傳
+          </button>
+        </div>
+        <div id="selected-files-list" style="font-size: 12.5px; color: #475569; display: flex; flex-direction: column; gap: 4px;"></div>
+      </div>
+
+      <!-- Attached Files List -->
+      <div style="margin-top: 20px;">
+        <h4 style="font-size: 14px; font-weight: 700; color: var(--text-main); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+          <span><i class="fa-solid fa-paperclip"></i> 已上傳附件列表 (<span id="project-files-total-badge">0</span>)</span>
+        </h4>
+        <div id="project-attached-files-list" class="attached-files-container">
+          <p style="color: var(--text-muted); text-align: center; padding: 24px;">尚無附件檔案，點擊上方區域即可上傳</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-project-files')">關閉</button>
+    </div>
+  </div>
+</div>
+
 <!-- WorkLog Modal (產生 / 編輯工作行程 - 支援語音) -->
 <div id="modal-worklog" class="modal-backdrop" style="display: none;">
   <div class="modal">
@@ -337,11 +509,19 @@
     </div>
     <div class="modal-body">
       <input type="hidden" id="worklog-id">
-      <div class="form-group">
-        <label>關聯客戶 <span id="worklog-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none;">(已鎖定客戶)</span></label>
-        <select id="worklog-customer" class="select-input">
-          <option value="">-- 無關聯客戶 / 內部行程 --</option>
-        </select>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>關聯客戶 <span id="worklog-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none;">(已鎖定客戶)</span></label>
+          <select id="worklog-customer" class="select-input" onchange="filterWorkLogProjects()">
+            <option value="">-- 無關聯客戶 / 內部行程 --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>關聯專案 / 案場 <span style="font-size:12px; color:var(--text-muted); font-weight:normal;">(選填)</span></label>
+          <select id="worklog-project" class="select-input">
+            <option value="">-- 無關聯專案 --</option>
+          </select>
+        </div>
       </div>
       <div class="form-group">
         <label>工作標題 / 任務名稱 *</label>
@@ -407,13 +587,15 @@
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
           <label>關聯客戶 * <span id="quotation-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none;">(已鎖定客戶)</span></label>
-          <select id="quotation-customer" class="select-input" required>
+          <select id="quotation-customer" class="select-input" required onchange="filterQuotationProjects()">
             <option value="">-- 請選擇客戶 --</option>
           </select>
         </div>
         <div class="form-group">
-          <label>報價單號 (留空自動編號)</label>
-          <input type="text" id="quotation-number" class="form-input" placeholder="例: QT-20260904-001">
+          <label>關聯專案 / 案場 <span style="font-size:12px; color:var(--text-muted); font-weight:normal;">(選填)</span></label>
+          <select id="quotation-project" class="select-input">
+            <option value="">-- 無關聯專案 --</option>
+          </select>
         </div>
       </div>
 
@@ -422,7 +604,11 @@
         <input type="text" id="quotation-title-input" class="form-input" placeholder="例: 室內設計裝修工程報價" required>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>報價單號 (留空自動編號)</label>
+          <input type="text" id="quotation-number" class="form-input" placeholder="例: QT-20260904-001">
+        </div>
         <div class="form-group">
           <label>報價日期</label>
           <input type="date" id="quotation-date" class="form-input">
@@ -494,11 +680,19 @@
       <input type="hidden" id="payment-id">
       <input type="hidden" id="payment-quotation-id">
       <input type="hidden" id="payment-locked-customer-id">
-      <div class="form-group">
-        <label>客戶姓名 / 公司 <span id="payment-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none; font-weight:600;">(已鎖定此客戶，不可修改)</span> <span id="payment-customer-optional-hint" style="font-size:12px; color:var(--text-muted); font-weight:normal;">(選填，散客/現場購買可不選)</span></label>
-        <select id="payment-customer" class="select-input">
-          <option value="">-- 散客 / 現場購買 (不記客戶) --</option>
-        </select>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>客戶姓名 / 公司 <span id="payment-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none; font-weight:600;">(已鎖定)</span> <span id="payment-customer-optional-hint" style="font-size:12px; color:var(--text-muted); font-weight:normal;">(選填)</span></label>
+          <select id="payment-customer" class="select-input" onchange="filterPaymentProjects()">
+            <option value="">-- 散客 / 現場購買 (不記客戶) --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>關聯專案 / 案場 <span style="font-size:12px; color:var(--text-muted); font-weight:normal;">(選填)</span></label>
+          <select id="payment-project" class="select-input">
+            <option value="">-- 無關聯專案 --</option>
+          </select>
+        </div>
       </div>
       <div class="form-group">
         <label>收費項目說明 (購買產品 / 尾款 / 訂金) *</label>
@@ -632,6 +826,8 @@
       <button class="btn btn-secondary" onclick="closeModal('modal-quick-payment')">取消</button>
       <button class="btn btn-success" onclick="saveQuickPayment()"><i class="fa-solid fa-check"></i> 立即入帳</button>
     </div>
+  </div>
+</div>
 <!-- Image Viewer Modal (檢視發票大圖) -->
 <div id="modal-image-viewer" class="modal-backdrop" style="display: none;" onclick="closeModal('modal-image-viewer')">
   <div class="modal" style="max-width: 90vw; max-height: 90vh; background: transparent; box-shadow: none; border: none; align-items: center; justify-content: center; position: relative;" onclick="event.stopPropagation()">

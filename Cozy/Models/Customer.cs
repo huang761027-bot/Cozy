@@ -19,7 +19,7 @@ namespace Cozy.Models
         public string Phone { get; set; } = string.Empty;
 
         [MaxLength(50)]
-        public string Category { get; set; } = "個人"; // 設計師, 公司, 個人, 專案, 其他
+        public string Category { get; set; } = "個人"; // 個人, 設計師, 公司, 其他
 
         [MaxLength(100)]
         public string? LineId { get; set; }
@@ -33,6 +33,9 @@ namespace Cozy.Models
         public string? Notes { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        [JsonIgnore]
+        public ICollection<Project> Projects { get; set; } = new List<Project>();
 
         [JsonIgnore]
         public ICollection<WorkLog> WorkLogs { get; set; } = new List<WorkLog>();
