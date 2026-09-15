@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="永倉管理">
-  <link rel="stylesheet" href="/css/app.css?v=20260904_3">
+  <link rel="stylesheet" href="/css/app.css?v=20260915_auth_v3">
   <!-- FontAwesome 6 Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Barcode & QR Code Scanner Libraries for Taiwan Electronic Invoices -->
@@ -209,13 +209,18 @@
         </button>
 
         <!-- Logged In User Profile Widget -->
-        <div id="user-profile-widget" class="user-profile-box" style="display: none;">
-          <img id="user-avatar-img" src="" alt="Google 頭像" class="user-avatar" style="display: none;">
-          <div class="user-info-text">
-            <span id="user-display-name" class="user-name">管理員</span>
-            <span id="user-display-role" class="badge badge-designer" style="font-size: 10px;">👑 超級管理員</span>
+        <div id="user-profile-widget" class="user-profile-box" style="display: none; align-items: center; gap: 10px; background: #ffffff; padding: 4px 6px 4px 10px; border-radius: 9999px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); height: 44px; box-sizing: border-box;">
+          <div class="user-avatar-wrapper" style="width: 34px; height: 34px; min-width: 34px; min-height: 34px; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 2px solid #2563eb; background: #eff6ff; flex-shrink: 0; box-sizing: border-box;">
+            <img id="user-avatar-img" src="" alt="Google 頭像" class="user-avatar" style="display: none; width: 34px; height: 34px; border-radius: 50%; object-fit: cover;" onerror="this.style.display='none'; document.getElementById('user-avatar-fallback').style.display='flex';">
+            <div id="user-avatar-fallback" class="user-avatar-fallback" style="display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #1d4ed8; background: linear-gradient(135deg, #dbeafe, #bfdbfe);">
+              <i class="fa-solid fa-user"></i>
+            </div>
           </div>
-          <button class="btn-logout" onclick="handleLogout()" title="登出系統">
+          <div class="user-info-text" style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; line-height: 1.15;">
+            <span id="user-display-name" class="user-name" style="font-size: 13px; font-weight: 700; color: #0f172a; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">管理員</span>
+            <span id="user-display-role" class="user-role-badge" style="font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; line-height: 1.2;">👑 超級管理員</span>
+          </div>
+          <button class="btn-logout" onclick="handleLogout()" title="登出系統" type="button" style="background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; width: 32px; height: 32px; min-width: 32px; min-height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; margin-left: 2px; padding: 0; outline: none; flex-shrink: 0;">
             <i class="fa-solid fa-arrow-right-from-bracket"></i>
           </button>
         </div>
@@ -1058,6 +1063,6 @@
   </div>
 </div>
 
-<script src="/js/app.js?v=20260904_3"></script>
+<script src="/js/app.js?v=20260915_auth_v3"></script>
 </body>
 </html>

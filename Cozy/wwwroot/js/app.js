@@ -1873,20 +1873,25 @@ function applyAuthState(isLoggedIn) {
       if (roleBadge) {
         if (currentUser.role === 'Admin') {
           roleBadge.textContent = '👑 超級管理員';
-          roleBadge.className = 'badge badge-designer';
+          roleBadge.className = 'user-role-badge role-admin';
         } else {
           roleBadge.textContent = '👤 一般員工';
-          roleBadge.className = 'badge badge-company';
+          roleBadge.className = 'user-role-badge';
         }
       }
 
       const avatarImg = document.getElementById('user-avatar-img');
-      if (avatarImg) {
+      const avatarFallback = document.getElementById('user-avatar-fallback');
+      if (avatarImg && avatarFallback) {
         if (currentUser.pictureUrl) {
           avatarImg.src = currentUser.pictureUrl;
           avatarImg.style.display = 'block';
+          avatarFallback.style.display = 'none';
         } else {
           avatarImg.style.display = 'none';
+          avatarFallback.style.display = 'flex';
+          const initial = (currentUser.name && currentUser.name.trim().length > 0) ? currentUser.name.trim().charAt(0) : 'U';
+          avatarFallback.innerHTML = `<span>${escapeHtml(initial)}</span>`;
         }
       }
     }
