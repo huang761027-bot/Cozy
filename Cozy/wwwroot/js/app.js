@@ -138,7 +138,6 @@ function switchTab(tabName) {
     customers: '<i class="fa-solid fa-users"></i> <span>客戶資料</span>',
     projects: '<i class="fa-solid fa-folder-open"></i> <span>專案案場</span>',
     worklogs: '<i class="fa-solid fa-calendar-check"></i> <span>工作行程</span>',
-    quotations: '<i class="fa-solid fa-file-invoice-dollar"></i> <span>報價管理</span>',
     payments: '<i class="fa-solid fa-wallet"></i> <span>收費紀錄</span>',
     users: '<i class="fa-solid fa-user-shield"></i> <span>帳號授權管理</span>'
   };
@@ -151,7 +150,6 @@ function switchTab(tabName) {
   if (tabName === 'customers') loadCustomers();
   if (tabName === 'projects') loadProjects();
   if (tabName === 'worklogs') loadWorkLogs();
-  if (tabName === 'quotations') loadQuotations();
   if (tabName === 'payments') loadPayments();
   if (tabName === 'users') loadUsers();
 }
@@ -203,67 +201,121 @@ function startFieldVoiceInput(targetInputId, micBtn) {
   recognition.start();
 }
 
-// ==================== 1. 總覽管理 (DASHBOARD) ====================
+// ==================== 1. 總覽管理 (DASHBOARD) - 以尚未完成的工程依照日期排序 ====================
 async function loadDashboard() {
   try {
     const res = await fetch('/api/dashboard/stats');
     if (!res.ok) return;
     const data = await res.json();
 
-    document.getElementById('stat-total-customers').innerText = data.totalCustomers;
-    document.getElementById('stat-month-revenue').innerText = formatCurrency(data.monthRevenue);
-    document.getElementById('stat-pending-payments').innerText = formatCurrency(data.pendingPaymentsAmount);
-    document.getElementById('stat-pending-tasks').innerText = data.pendingWorkLogsCount;
+    const pendingProjectsEl = document.getElementById('stat-pending-projects');
+    if (pendingProjectsEl) pendingProjectsEl.innerText = data.pendingProjectsCount || 0;
 
-    // Render today's worklogs
-    const todayList = document.getElementById('today-worklogs-list');
-    if (data.todayWorkLogs && data.todayWorkLogs.length > 0) {
-      todayList.innerHTML = data.todayWorkLogs.map(item => `
-        <div class="list-item-card ${item.isPriority ? 'is-priority' : ''}">
-          <div class="list-item-top">
-            <div class="list-item-info">
-              <div class="list-item-title">
-                <i class="fa-solid fa-calendar-check" style="color: var(--primary);"></i>
-                ${item.isPriority ? '<span class="badge badge-priority"><i class="fa-solid fa-star"></i> 優先 (*)</span>' : ''}
-                <span>${item.title}</span>
-                <span class="badge ${getStatusBadgeClass(item.status)}">${item.status}</span>
+    const pendingTasksEl = document.getElementById('stat-pending-tasks');
+    if (pendingTasksEl) pendingTasksEl.innerText = data.pendingWorkLogsCount || 0;
+
+    const monthRevenueEl = document.getElementById('stat-month-revenue');
+    if (monthRevenueEl) monthRevenueEl.innerText = formatCurrency(data.monthRevenue);
+
+    const pendingPaymentsEl = document.getElementById('stat-pending-payments');
+    if (pendingPaymentsEl) pendingPaymentsEl.innerText = formatCurrency(data.pendingPaymentsAmount);
+
+    const badgeCountEl = document.getElementById('badge-pending-projects-count');
+    if (badgeCountEl) badgeCountEl.innerText = `${data.pendingProjects ? data.pendingProjects.length : 0} 案`;
+
+    // 1. 尚未完成的工程案場 (依照預計完工日/開工日/建立日期排序)
+    const pendingProjectsList = document.getElementById('dashboard-pending-projects-list');
+    if (pendingProjectsList) {
+      if (data.pendingProjects && data.pendingProjects.length > 0) {
+        pendingProjectsList.innerHTML = data.pendingProjects.map(p => `
+          <div class="list-item-card">
+            <div class="list-item-top">
+              <div class="list-item-info">
+                <div class="list-item-title" style="flex-wrap: wrap; gap: 6px;">
+                  <span class="project-number-badge"><i class="fa-solid fa-hashtag"></i> ${p.projectNumber || 'PRJ'}</span>
+                  <span style="font-size: 16.5px; font-weight: 800; color: #1e293b;">${p.name}</span>
+                  <span class="badge ${getProjectStatusBadgeClass(p.status)}">${p.status}</span>
+                  ${p.budget ? `<span style="font-weight: 800; color: var(--success); margin-left: 4px;">預算: ${formatCurrency(p.budget)}</span>` : ''}
+                </div>
+                <div class="list-item-sub" style="margin-top: 6px;">
+                  <span><i class="fa-solid fa-user"></i> <b>${p.customerName}</b> ${p.customerPhone ? '(' + p.customerPhone + ')' : ''}</span>
+                  ${p.endDate ? `<span style="color: #dc2626; font-weight: 700;"><i class="fa-solid fa-flag-checkered"></i> 預計完工: ${formatDate(p.endDate)}</span>` : ''}
+                  ${p.startDate ? `<span><i class="fa-regular fa-calendar-plus"></i> 開工: ${formatDate(p.startDate)}</span>` : ''}
+                  ${p.address ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${p.address}</span>` : ''}
+                  ${p.contactPerson ? `<span><i class="fa-solid fa-id-badge"></i> 現場: ${p.contactPerson} ${p.contactPhone || ''}</span>` : ''}
+                </div>
               </div>
-              <div class="list-item-sub">
-                <span><i class="fa-regular fa-clock"></i> 預定: ${formatDateTime(item.scheduledAt)}</span>
-                <span><i class="fa-solid fa-user"></i> ${item.customerName}</span>
-                ${item.statusUpdatedAt ? `<span class="status-time-tag"><i class="fa-solid fa-clock-rotate-left"></i> 狀態更新: ${formatDateTime(item.statusUpdatedAt)}</span>` : ''}
+              <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                <button class="btn btn-sm btn-primary" onclick="openWorkLogModal(null, ${p.customerId}, ${p.id}, '保養')" title="排定此案場工單"><i class="fa-solid fa-calendar-plus"></i> 排行程</button>
+                <button class="btn btn-sm btn-secondary" onclick="openProjectFilesModal(${p.id})" title="案場附件庫"><i class="fa-solid fa-paperclip"></i> 附件</button>
+                <button class="btn btn-sm btn-secondary" onclick="editProject(${p.id})" title="編輯案場"><i class="fa-solid fa-pen"></i></button>
               </div>
             </div>
           </div>
-        </div>
-      `).join('');
-    } else {
-      todayList.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">今日尚無排定行程</p>';
+        `).join('');
+      } else {
+        pendingProjectsList.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 28px;">目前無尚未完工的工程案場 🎉</p>';
+      }
     }
 
-    // Render recent payments
-    const recentList = document.getElementById('recent-payments-list');
-    if (data.recentPayments && data.recentPayments.length > 0) {
-      recentList.innerHTML = data.recentPayments.map(p => `
-        <div class="list-item-card">
-          <div class="list-item-top">
-            <div class="list-item-info">
-              <div class="list-item-title">
-                <i class="fa-solid fa-receipt" style="color: var(--success);"></i>
-                <span>${p.title}</span>
-                <span style="color: var(--success); font-weight: 800; margin-left: 4px;">+${formatCurrency(p.amount)}</span>
+    // 2. 待辦/進行中行程與工單 (保養/安裝/維修)
+    const pendingWorkLogsList = document.getElementById('dashboard-pending-worklogs-list');
+    if (pendingWorkLogsList) {
+      if (data.pendingWorkLogs && data.pendingWorkLogs.length > 0) {
+        pendingWorkLogsList.innerHTML = data.pendingWorkLogs.map(w => `
+          <div class="list-item-card ${w.isPriority ? 'is-priority' : ''}">
+            <div class="list-item-top">
+              <div class="list-item-info">
+                <div class="list-item-title">
+                  ${getWorkTypeBadgeHtml(w.workType)}
+                  ${w.isPriority ? '<span class="badge badge-priority"><i class="fa-solid fa-star"></i> 優先 (*)</span>' : ''}
+                  <span>${w.title}</span>
+                  <span class="badge ${getStatusBadgeClass(w.status)}">${w.status}</span>
+                </div>
+                <div class="list-item-sub">
+                  <span><i class="fa-regular fa-clock"></i> 預定: ${formatDateTime(w.scheduledAt)}</span>
+                  <span><i class="fa-solid fa-user"></i> <b>${w.customerName}</b></span>
+                  ${w.projectName ? `<span style="color: var(--primary);">[${w.projectName}]</span>` : ''}
+                  ${w.location ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${w.location}</span>` : ''}
+                </div>
               </div>
-              <div class="list-item-sub">
-                <span><i class="fa-regular fa-calendar"></i> ${formatDate(p.paymentDate)}</span>
-                <span><i class="fa-solid fa-user"></i> ${p.customerName}</span>
-                <span class="badge ${p.status === '已收款' ? 'badge-success' : 'badge-warning'}">${p.status}</span>
+              <div style="display: flex; gap: 4px; align-items: center;">
+                <button class="btn btn-sm btn-gcal" onclick="addToGoogleCalendar(${w.id})" title="Google 日曆"><i class="fa-brands fa-google"></i></button>
+                <button class="btn btn-sm btn-secondary" onclick="editWorkLog(${w.id})" title="編輯"><i class="fa-solid fa-pen"></i></button>
               </div>
             </div>
           </div>
-        </div>
-      `).join('');
-    } else {
-      recentList.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">尚無收費紀錄</p>';
+        `).join('');
+      } else {
+        pendingWorkLogsList.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">尚無待辦之行程或保修工單</p>';
+      }
+    }
+
+    // 3. 近期收費紀錄
+    const recentList = document.getElementById('recent-payments-list');
+    if (recentList) {
+      if (data.recentPayments && data.recentPayments.length > 0) {
+        recentList.innerHTML = data.recentPayments.map(p => `
+          <div class="list-item-card">
+            <div class="list-item-top">
+              <div class="list-item-info">
+                <div class="list-item-title">
+                  <i class="fa-solid fa-receipt" style="color: var(--success);"></i>
+                  <span>${p.title}</span>
+                  <span style="color: var(--success); font-weight: 800; margin-left: 4px;">+${formatCurrency(p.amount)}</span>
+                </div>
+                <div class="list-item-sub">
+                  <span><i class="fa-regular fa-calendar"></i> ${formatDate(p.paymentDate)}</span>
+                  <span><i class="fa-solid fa-user"></i> ${p.customerName}</span>
+                  <span class="badge ${p.status === '已收款' ? 'badge-success' : 'badge-warning'}">${p.status}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        recentList.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">尚無收費紀錄</p>';
+      }
     }
   } catch (err) {
     console.error('Error loading dashboard stats:', err);
@@ -311,19 +363,25 @@ async function loadCustomers() {
           </div>
         </div>
 
-        <!-- 選擇客戶 > 產生專案 / 產生報價 / 產生收費 / 產生工作行程 -->
+        <!-- 客戶動作按鈕群：建立專案 / 保養 / 安裝 / 維修 / 查看保修歷程 / 記帳收費 -->
         <div class="customer-action-btn-group">
           <button class="btn btn-sm btn-action-project" onclick="triggerCustomerAction(${c.id}, 'project')">
             <i class="fa-solid fa-folder-plus"></i> 建立專案案場
           </button>
-          <button class="btn btn-sm btn-action-quote" onclick="triggerCustomerAction(${c.id}, 'quote')">
-            <i class="fa-solid fa-file-invoice-dollar"></i> 產生報價單
+          <button class="btn btn-sm btn-action-maint" onclick="triggerCustomerAction(${c.id}, 'maint')">
+            <i class="fa-solid fa-wrench"></i> 排定保養
+          </button>
+          <button class="btn btn-sm btn-action-inst" onclick="triggerCustomerAction(${c.id}, 'inst')">
+            <i class="fa-solid fa-box"></i> 排定安裝
+          </button>
+          <button class="btn btn-sm btn-action-repair" onclick="triggerCustomerAction(${c.id}, 'repair')">
+            <i class="fa-solid fa-screwdriver-wrench"></i> 排定維修
+          </button>
+          <button class="btn btn-sm btn-action-history" onclick="viewCustomerHistory(${c.id})" title="查詢此客戶過往所有保養、安裝與維修紀錄">
+            <i class="fa-solid fa-clipboard-list"></i> 📋 保修紀錄歷程
           </button>
           <button class="btn btn-sm btn-action-pay" onclick="triggerCustomerAction(${c.id}, 'pay')">
             <i class="fa-solid fa-wallet"></i> 產生收費紀錄
-          </button>
-          <button class="btn btn-sm btn-action-log" onclick="triggerCustomerAction(${c.id}, 'log')">
-            <i class="fa-solid fa-calendar-plus"></i> 產生工作行程
           </button>
         </div>
       </div>
@@ -336,12 +394,16 @@ async function loadCustomers() {
 function triggerCustomerAction(customerId, actionType) {
   if (actionType === 'project') {
     openProjectModal(null, customerId);
-  } else if (actionType === 'quote') {
-    openQuotationModal(null, customerId);
+  } else if (actionType === 'maint') {
+    openWorkLogModal(null, customerId, null, '保養');
+  } else if (actionType === 'inst') {
+    openWorkLogModal(null, customerId, null, '安裝');
+  } else if (actionType === 'repair') {
+    openWorkLogModal(null, customerId, null, '維修');
+  } else if (actionType === 'log') {
+    openWorkLogModal(null, customerId, null, '保養');
   } else if (actionType === 'pay') {
     openPaymentModal(null, customerId);
-  } else if (actionType === 'log') {
-    openWorkLogModal(null, customerId);
   }
 }
 
@@ -370,14 +432,6 @@ function populateCustomerDropdowns() {
     const cur = worklogSelect.value;
     worklogSelect.innerHTML = '<option value="">-- 無關聯客戶 / 內部行程 --</option>' + optionsHtml;
     if (cur) worklogSelect.value = cur;
-  }
-
-  // Quotations
-  const quoteSelect = document.getElementById('quotation-customer');
-  if (quoteSelect) {
-    const cur = quoteSelect.value;
-    quoteSelect.innerHTML = '<option value="">-- 請選擇客戶 --</option>' + optionsHtml;
-    if (cur) quoteSelect.value = cur;
   }
 
   // Payments (Default top is 散客 / 現場購買)
@@ -411,13 +465,6 @@ function populateProjectDropdowns() {
     if (cur) worklogProjSelect.value = cur;
   }
 
-  const quoteProjSelect = document.getElementById('quotation-project');
-  if (quoteProjSelect) {
-    const cur = quoteProjSelect.value;
-    quoteProjSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + projectOptionsHtml;
-    if (cur) quoteProjSelect.value = cur;
-  }
-
   const payProjSelect = document.getElementById('payment-project');
   if (payProjSelect) {
     const cur = payProjSelect.value;
@@ -430,15 +477,6 @@ function filterWorkLogProjects() {
   const custId = document.getElementById('worklog-customer').value;
   const filtered = custId ? projectsCache.filter(p => p.customerId == custId) : projectsCache;
   const projSelect = document.getElementById('worklog-project');
-  if (projSelect) {
-    projSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + filtered.map(p => `<option value="${p.id}">[${p.projectNumber}] ${p.name}</option>`).join('');
-  }
-}
-
-function filterQuotationProjects() {
-  const custId = document.getElementById('quotation-customer').value;
-  const filtered = custId ? projectsCache.filter(p => p.customerId == custId) : projectsCache;
-  const projSelect = document.getElementById('quotation-project');
   if (projSelect) {
     projSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + filtered.map(p => `<option value="${p.id}">[${p.projectNumber}] ${p.name}</option>`).join('');
   }
@@ -603,11 +641,14 @@ async function loadProjects() {
           <button class="btn btn-sm btn-action-files" onclick="openProjectFilesModal(${p.id})">
             <i class="fa-solid fa-cloud-arrow-up"></i> 上傳/檢視附件 (${p.fileCount})
           </button>
-          <button class="btn btn-sm btn-action-quote" onclick="openQuotationModal(null, ${p.customerId}, ${p.id})">
-            <i class="fa-solid fa-file-invoice-dollar"></i> 開立專案報價單
+          <button class="btn btn-sm btn-action-maint" onclick="openWorkLogModal(null, ${p.customerId}, ${p.id}, '保養')">
+            <i class="fa-solid fa-wrench"></i> 排定保養
           </button>
-          <button class="btn btn-sm btn-action-log" onclick="openWorkLogModal(null, ${p.customerId}, ${p.id})">
-            <i class="fa-solid fa-calendar-plus"></i> 排定專案行程
+          <button class="btn btn-sm btn-action-inst" onclick="openWorkLogModal(null, ${p.customerId}, ${p.id}, '安裝')">
+            <i class="fa-solid fa-box"></i> 排定安裝
+          </button>
+          <button class="btn btn-sm btn-action-repair" onclick="openWorkLogModal(null, ${p.customerId}, ${p.id}, '維修')">
+            <i class="fa-solid fa-screwdriver-wrench"></i> 排定維修
           </button>
           <button class="btn btn-sm btn-action-pay" onclick="openPaymentModal(null, ${p.customerId}, ${p.id})">
             <i class="fa-solid fa-wallet"></i> 專案收費紀錄
@@ -798,22 +839,26 @@ function renderAttachedFilesList(files) {
     const iconInfo = getFileIconInfo(f.fileName, f.fileType);
     return `
       <div class="attached-file-item">
-        <div class="file-type-icon ${iconInfo.className}">
-          <i class="${iconInfo.icon}"></i>
-        </div>
-        <div class="file-item-info">
-          <div class="file-item-name" title="${f.fileName}">${f.fileName}</div>
-          <div class="file-item-meta">
-            <span><i class="fa-solid fa-tag"></i> ${iconInfo.label}</span>
-            <span><i class="fa-solid fa-hard-drive"></i> ${formatFileSize(f.fileSizeBytes)}</span>
-            <span><i class="fa-regular fa-clock"></i> ${formatDateTime(f.uploadedAt)}</span>
+        <div class="attached-file-info">
+          <div class="attached-file-icon ${iconInfo.className}">
+            <i class="${iconInfo.icon}"></i>
+          </div>
+          <div class="attached-file-meta">
+            <div class="attached-file-name" title="${f.fileName}">${f.fileName}</div>
+            <div class="attached-file-sub">
+              <span>${iconInfo.label}</span>
+              <span>•</span>
+              <span>${formatFileSize(f.fileSizeBytes)}</span>
+              <span>•</span>
+              <span>${formatDateTime(f.uploadedAt)}</span>
+            </div>
           </div>
         </div>
-        <div class="file-item-actions">
-          <a href="/api/projects/files/${f.id}/download" target="_blank" download="${f.fileName}" class="btn-file-dl" title="下載或檢視檔案">
-            <i class="fa-solid fa-download"></i> 檢視/下載
+        <div class="attached-file-actions">
+          <a href="/api/projects/files/${f.id}/download" class="btn btn-sm btn-secondary" target="_blank" download="${f.fileName}" title="下載檔案">
+            <i class="fa-solid fa-download"></i>
           </a>
-          <button class="btn-file-del" onclick="deleteProjectFile(${f.id}, '${f.fileName}')" title="刪除此檔案">
+          <button class="btn btn-sm btn-danger" onclick="deleteProjectFile(${f.id}, '${f.fileName}')" title="刪除檔案">
             <i class="fa-solid fa-trash"></i>
           </button>
         </div>
@@ -822,24 +867,22 @@ function renderAttachedFilesList(files) {
   }).join('');
 }
 
-function handleProjectFilesSelect(event) {
-  const input = event.target;
-  if (!input.files || input.files.length === 0) return;
+function handleProjectFilesSelect(e) {
+  const files = Array.from(e.target.files);
+  if (!files || files.length === 0) return;
 
-  projectStagedFiles = Array.from(input.files);
-  const previewBox = document.getElementById('selected-files-preview');
-  const countSpan = document.getElementById('selected-files-count');
-  const listDiv = document.getElementById('selected-files-list');
+  projectStagedFiles = files;
+  document.getElementById('selected-files-count').innerText = `已選擇 ${files.length} 個檔案`;
 
-  countSpan.innerText = `已選擇 ${projectStagedFiles.length} 個檔案`;
-  listDiv.innerHTML = projectStagedFiles.map(f => `
-    <div style="display: flex; justify-content: space-between; padding: 2px 0;">
-      <span>📄 <b>${f.name}</b></span>
+  const listEl = document.getElementById('selected-files-list');
+  listEl.innerHTML = files.map(f => `
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span><i class="fa-solid fa-file"></i> ${f.name}</span>
       <span style="color: #64748b;">${formatFileSize(f.size)}</span>
     </div>
   `).join('');
 
-  previewBox.style.display = 'block';
+  document.getElementById('selected-files-preview').style.display = 'block';
 }
 
 async function uploadProjectFiles() {
@@ -907,18 +950,48 @@ async function deleteProjectFile(fileId, fileName) {
   }
 }
 
-// ==================== 4. 工作行程 (WORKLOGS) ====================
+// ==================== 3. 工作行程 / 保養安裝維修工單 (WORKLOGS) ====================
+function getWorkTypeBadgeHtml(workType) {
+  const type = workType || '保養';
+  if (type === '保養') {
+    return '<span class="badge badge-worktype-maint"><i class="fa-solid fa-wrench"></i> 保養</span>';
+  } else if (type === '安裝') {
+    return '<span class="badge badge-worktype-inst"><i class="fa-solid fa-box"></i> 安裝</span>';
+  } else if (type === '維修') {
+    return '<span class="badge badge-worktype-repair"><i class="fa-solid fa-screwdriver-wrench"></i> 維修</span>';
+  }
+  return `<span class="badge badge-worktype-other"><i class="fa-solid fa-list-check"></i> ${type}</span>`;
+}
+
+function handleWorkTypeChange(val) {
+  const inputEl = document.getElementById('worklog-type');
+  if (inputEl) inputEl.value = val;
+}
+
 async function loadWorkLogs() {
-  const search = document.getElementById('worklog-search').value;
-  const status = document.getElementById('worklog-status-filter').value;
+  const search = document.getElementById('worklog-search') ? document.getElementById('worklog-search').value : '';
+  const typeFilter = document.getElementById('worklog-type-filter') ? document.getElementById('worklog-type-filter').value : '';
+  const statusFilter = document.getElementById('worklog-status-filter') ? document.getElementById('worklog-status-filter').value : 'incomplete';
+
+  let url = `/api/worklogs?search=${encodeURIComponent(search || '')}&workType=${encodeURIComponent(typeFilter || '')}`;
+  
+  if (statusFilter === 'incomplete') {
+    url += '&hideCompleted=true';
+  } else if (statusFilter === 'all') {
+    url += '&showAll=true';
+  } else if (statusFilter) {
+    url += `&status=${encodeURIComponent(statusFilter)}`;
+  }
+
   try {
-    const res = await fetch(`/api/worklogs?search=${encodeURIComponent(search || '')}&status=${encodeURIComponent(status || '')}`);
+    const res = await fetch(url);
     if (!res.ok) return;
     const data = await res.json();
     const listEl = document.getElementById('worklogs-list');
+    if (!listEl) return;
 
     if (data.length === 0) {
-      listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 40px;">尚無工作行程，請至「客戶資料」中點擊「產生工作行程」</p>';
+      listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 40px;">目前尚無符合條件的行程工單（已完成與取消預設隱藏）</p>';
       return;
     }
 
@@ -926,11 +999,12 @@ async function loadWorkLogs() {
       <div class="list-item-card ${w.isPriority ? 'is-priority' : ''}">
         <div class="list-item-top">
           <div class="list-item-info">
-            <div class="list-item-title">
-              <i class="fa-solid fa-calendar-check" style="color: var(--primary);"></i>
+            <div class="list-item-title" style="flex-wrap: wrap; gap: 6px;">
+              ${getWorkTypeBadgeHtml(w.workType)}
               ${w.isPriority ? '<span class="badge badge-priority"><i class="fa-solid fa-star"></i> 優先處理 (*)</span>' : ''}
-              <span>${w.title}</span>
+              <span style="font-size: 16px; font-weight: 800;">${w.title}</span>
               <span class="badge ${getStatusBadgeClass(w.status)}">${w.status}</span>
+              ${w.projectName ? `<span style="font-size: 12px; color: var(--primary); font-weight: 700;">[案場: ${w.projectName}]</span>` : ''}
               ${w.customerCategory ? `<span class="badge ${getCategoryBadgeClass(w.customerCategory)}">${w.customerCategory}</span>` : ''}
             </div>
             <div class="list-item-sub">
@@ -939,7 +1013,7 @@ async function loadWorkLogs() {
               ${w.location ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${w.location}</span>` : ''}
               ${w.statusUpdatedAt ? `<span class="status-time-tag"><i class="fa-solid fa-clock-rotate-left"></i> 狀態更新: ${formatDateTime(w.statusUpdatedAt)}</span>` : ''}
             </div>
-            ${w.details ? `<div style="font-size: 13.5px; color: #334155; margin-top: 8px; white-space: pre-line; background: #f8fafc; border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 4px;">${w.details}</div>` : ''}
+            ${w.details ? `<div style="font-size: 13.5px; color: #334155; margin-top: 8px; white-space: pre-line; background: #f8fafc; border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 4px;"><i class="fa-regular fa-note-sticky"></i> <b>施工說明/檢修備註：</b>\n${w.details}</div>` : ''}
           </div>
           <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
             <button class="btn btn-sm btn-gcal" onclick="addToGoogleCalendar(${w.id})" title="一鍵加入個人 Google 日曆"><i class="fa-brands fa-google"></i> Google 日曆</button>
@@ -970,15 +1044,18 @@ async function changeWorkLogStatus(id, newStatus) {
     if (res.ok) {
       loadWorkLogs();
       loadDashboard();
+      if (currentHistoryCustomerId) {
+        viewCustomerHistory(currentHistoryCustomerId);
+      }
     }
   } catch (err) {
     console.error('Error updating status:', err);
   }
 }
 
-function openWorkLogModal(id = null, preSelectCustomerId = null, preSelectProjectId = null) {
+function openWorkLogModal(id = null, preSelectCustomerId = null, preSelectProjectId = null, defaultWorkType = '保養') {
   document.getElementById('worklog-id').value = id || '';
-  document.getElementById('modal-worklog-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯工作行程' : '<i class="fa-solid fa-calendar-plus" style="color: var(--primary);"></i> 排定工作行程';
+  document.getElementById('modal-worklog-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯工作行程 / 保修工單' : '<i class="fa-solid fa-calendar-plus" style="color: var(--primary);"></i> 排定工作行程 / 保修工單';
   populateCustomerDropdowns();
 
   const customerSelect = document.getElementById('worklog-customer');
@@ -998,6 +1075,15 @@ function openWorkLogModal(id = null, preSelectCustomerId = null, preSelectProjec
   if (preSelectProjectId) {
     const projSelect = document.getElementById('worklog-project');
     if (projSelect) projSelect.value = preSelectProjectId;
+  }
+
+  const selectedType = defaultWorkType || '保養';
+  const typeInput = document.getElementById('worklog-type');
+  if (typeInput) typeInput.value = selectedType;
+
+  const radios = document.getElementsByName('worklog-type-radio');
+  for (const r of radios) {
+    r.checked = (r.value === selectedType);
   }
 
   if (!id) {
@@ -1022,7 +1108,7 @@ async function editWorkLog(id) {
   const w = await res.json();
 
   document.getElementById('worklog-id').value = w.id;
-  document.getElementById('modal-worklog-title').innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯工作行程';
+  document.getElementById('modal-worklog-title').innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯工作行程 / 保修工單';
   populateCustomerDropdowns();
 
   const customerSelect = document.getElementById('worklog-customer');
@@ -1034,6 +1120,15 @@ async function editWorkLog(id) {
   filterWorkLogProjects();
   const projSelect = document.getElementById('worklog-project');
   if (projSelect) projSelect.value = w.projectId || '';
+
+  const wType = w.workType || '保養';
+  const typeInput = document.getElementById('worklog-type');
+  if (typeInput) typeInput.value = wType;
+
+  const radios = document.getElementsByName('worklog-type-radio');
+  for (const r of radios) {
+    r.checked = (r.value === wType);
+  }
 
   document.getElementById('worklog-title-input').value = w.title || '';
   document.getElementById('worklog-time').value = w.scheduledAt ? w.scheduledAt.substring(0, 16) : '';
@@ -1047,6 +1142,7 @@ async function editWorkLog(id) {
 
 async function saveWorkLog() {
   const id = document.getElementById('worklog-id').value;
+  const workType = document.getElementById('worklog-type') ? document.getElementById('worklog-type').value : '保養';
   const title = document.getElementById('worklog-title-input').value.trim();
   const scheduledAt = document.getElementById('worklog-time').value;
   const customerIdVal = document.getElementById('worklog-customer').value;
@@ -1061,6 +1157,7 @@ async function saveWorkLog() {
     id: id ? parseInt(id) : 0,
     customerId: customerIdVal ? parseInt(customerIdVal) : null,
     projectId: projectIdVal ? parseInt(projectIdVal) : null,
+    workType: workType || '保養',
     title,
     scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : new Date().toISOString(),
     location: document.getElementById('worklog-location').value.trim(),
@@ -1083,6 +1180,9 @@ async function saveWorkLog() {
       closeModal('modal-worklog');
       loadWorkLogs();
       loadDashboard();
+      if (currentHistoryCustomerId) {
+        viewCustomerHistory(currentHistoryCustomerId);
+      }
     } else {
       const errMsg = await parseErrorMessage(res, '請檢查輸入欄位');
       alert(`儲存行程失敗：${errMsg}`);
@@ -1098,439 +1198,115 @@ async function deleteWorkLog(id) {
   if (res.ok) {
     loadWorkLogs();
     loadDashboard();
+    if (currentHistoryCustomerId) {
+      viewCustomerHistory(currentHistoryCustomerId);
+    }
   }
 }
 
-// ==================== 4. 報價管理 (QUOTATIONS) ====================
-async function loadQuotations() {
-  const search = document.getElementById('quotation-search').value;
-  const status = document.getElementById('quotation-status-filter').value;
-  try {
-    const res = await fetch(`/api/quotations?search=${encodeURIComponent(search || '')}&status=${encodeURIComponent(status || '')}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    quotationsCache = data;
-    const listEl = document.getElementById('quotations-list');
+// ==================== 📋 客戶保修紀錄歷程 (CUSTOMER SERVICE HISTORY) ====================
+let currentHistoryCustomerId = null;
 
-    if (data.length === 0) {
-      listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 40px;">尚無報價單，請至「客戶資料」中點擊「產生報價單」</p>';
+async function viewCustomerHistory(customerId) {
+  currentHistoryCustomerId = customerId;
+  const customer = customersCache.find(c => c.id === customerId);
+  const custName = customer ? customer.name : '客戶';
+  const custPhone = customer ? customer.phone : '';
+  const custCategory = customer ? customer.category : '';
+  const custAddress = customer ? customer.address : '';
+
+  document.getElementById('customer-history-title').innerHTML = `
+    <i class="fa-solid fa-clipboard-list" style="color: var(--primary);"></i> 
+    <b>${custName}</b> 的保修歷史紀錄歷程
+    ${custCategory ? `<span class="badge ${getCategoryBadgeClass(custCategory)}">${custCategory}</span>` : ''}
+  `;
+  document.getElementById('customer-history-subtitle').innerHTML = `
+    <span><i class="fa-solid fa-phone"></i> ${custPhone || '無電話'}</span>
+    ${custAddress ? `<span style="margin-left: 12px;"><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${custAddress}</span>` : ''}
+  `;
+
+  const timelineEl = document.getElementById('customer-history-timeline');
+  timelineEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;"><i class="fa-solid fa-spinner fa-spin"></i> 載入保修歷史紀錄中...</p>';
+
+  openModal('modal-customer-history');
+
+  try {
+    const res = await fetch(`/api/worklogs/customer/${customerId}`);
+    if (!res.ok) {
+      timelineEl.innerHTML = '<p style="color: var(--danger); text-align: center; padding: 24px;">載入歷史紀錄失敗</p>';
+      return;
+    }
+    const list = await res.json();
+
+    let maintCount = 0, instCount = 0, repairCount = 0;
+    list.forEach(item => {
+      const type = item.workType || '保養';
+      if (type === '保養') maintCount++;
+      else if (type === '安裝') instCount++;
+      else if (type === '維修') repairCount++;
+    });
+
+    document.getElementById('hist-count-total').innerText = list.length;
+    document.getElementById('hist-count-maint').innerText = maintCount;
+    document.getElementById('hist-count-inst').innerText = instCount;
+    document.getElementById('hist-count-repair').innerText = repairCount;
+
+    if (list.length === 0) {
+      timelineEl.innerHTML = `
+        <div style="text-align: center; padding: 36px 20px; color: var(--text-muted);">
+          <i class="fa-solid fa-clipboard-check" style="font-size: 36px; color: #cbd5e1; margin-bottom: 8px;"></i>
+          <p style="font-size: 14.5px; font-weight: 600; color: #64748b;">此客戶目前尚無保養、安裝或維修紀錄</p>
+          <div style="display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-action-maint" onclick="quickAddServiceFromHistory('保養')"><i class="fa-solid fa-plus"></i> 新增保養紀錄</button>
+            <button class="btn btn-sm btn-action-inst" onclick="quickAddServiceFromHistory('安裝')"><i class="fa-solid fa-plus"></i> 新增安裝紀錄</button>
+            <button class="btn btn-sm btn-action-repair" onclick="quickAddServiceFromHistory('維修')"><i class="fa-solid fa-plus"></i> 新增維修紀錄</button>
+          </div>
+        </div>
+      `;
       return;
     }
 
-    const customerGroups = {};
-    data.forEach(q => {
-      const cId = q.customerId;
-      if (!customerGroups[cId]) {
-        customerGroups[cId] = [];
-      }
-      customerGroups[cId].push(q);
-    });
+    timelineEl.innerHTML = list.map(item => {
+      const type = item.workType || '保養';
+      let itemClass = 'item-other';
+      if (type === '保養') itemClass = 'item-maint';
+      else if (type === '安裝') itemClass = 'item-inst';
+      else if (type === '維修') itemClass = 'item-repair';
 
-    let html = '';
-    for (const cId in customerGroups) {
-      const quotes = customerGroups[cId];
-      const latest = quotes[0];
-      const older = quotes.slice(1);
-
-      html += `
-        <div class="quotation-group-box">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <div style="font-weight: 800; font-size: 16px; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
-              <i class="fa-solid fa-user-tie" style="color: var(--primary);"></i>
-              <span>${latest.customerName}</span>
-              ${latest.customerCategory ? `<span class="badge ${getCategoryBadgeClass(latest.customerCategory)}">${latest.customerCategory}</span>` : ''}
-              <span style="font-size: 13px; color: var(--text-muted); font-weight: normal;">${latest.customerPhone || ''}</span>
+      return `
+        <div class="history-timeline-item ${itemClass}">
+          <div class="history-item-top">
+            <div class="history-item-title">
+              ${getWorkTypeBadgeHtml(type)}
+              <span>${item.title}</span>
+              <span class="badge ${getStatusBadgeClass(item.status)}">${item.status}</span>
+              ${item.isPriority ? '<span class="badge badge-priority"><i class="fa-solid fa-star"></i> 優先</span>' : ''}
+              ${item.projectName ? `<span style="font-size: 12px; color: var(--primary); font-weight: 700;">[案場: ${item.projectName}]</span>` : ''}
             </div>
-            <span class="badge ${getQuotationBadgeClass(latest.status)}">${latest.status}</span>
-          </div>
-
-          <!-- Latest Quotation Card -->
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-            <div>
-              <div style="font-weight: 800; font-size: 16px; color: var(--primary);">
-                <i class="fa-solid fa-file-invoice"></i> [${latest.quotationNumber}] ${latest.title}
-                <span style="font-size: 11px; background: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: 700;">最新版本</span>
-              </div>
-              <div style="font-size: 13.5px; color: var(--text-muted); margin-top: 5px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                <span><i class="fa-regular fa-calendar"></i> 報價日期: ${formatDate(latest.issueDate)}</span>
-                <span><i class="fa-solid fa-calculator"></i> 總額: <b style="font-size: 16px; color: var(--text-main);">${formatCurrency(latest.totalAmount)}</b></span>
-                ${latest.hasPayment ? '<span class="badge badge-success" style="font-size: 11.5px;"><i class="fa-solid fa-check-double"></i> 已轉入收費</span>' : ''}
-              </div>
-            </div>
-            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <button class="btn btn-sm btn-primary" onclick="viewQuotation(${latest.id})"><i class="fa-solid fa-eye"></i> 預覽/列印</button>
-              ${!latest.hasPayment ? `
-                <button class="btn btn-sm btn-action-pay" onclick="convertQuotationToPayment(${latest.id}, '${latest.title}', ${latest.totalAmount})">
-                  <i class="fa-solid fa-money-bill-wave"></i> 轉入收費紀錄
-                </button>
-              ` : ''}
-              <button class="btn btn-sm btn-secondary" onclick="editQuotation(${latest.id})"><i class="fa-solid fa-pen"></i></button>
-              <button class="btn btn-sm btn-danger" onclick="deleteQuotation(${latest.id})"><i class="fa-solid fa-trash"></i></button>
+            <div class="history-item-date">
+              <i class="fa-regular fa-calendar-days"></i> ${formatDateTime(item.scheduledAt)}
             </div>
           </div>
-
-          <!-- Collapsible Older History -->
-          ${older.length > 0 ? `
-            <button type="button" class="history-toggle-btn" onclick="toggleQuotationHistory('hist-${cId}', this)">
-              <i class="fa-solid fa-clock-rotate-left"></i> 展開歷史報價紀錄 (${older.length} 筆)
-            </button>
-            <div id="hist-${cId}" class="history-container">
-              ${older.map(oldQ => `
-                <div style="background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 13.5px;">
-                  <div>
-                    <span style="color: #64748b; font-family: monospace;">[${oldQ.quotationNumber}]</span>
-                    <b>${oldQ.title}</b>
-                    <span class="badge ${getQuotationBadgeClass(oldQ.status)}">${oldQ.status}</span>
-                    <span style="color: #64748b; margin-left: 8px;">${formatDate(oldQ.issueDate)}</span>
-                    <b style="margin-left: 8px; color: var(--primary);">${formatCurrency(oldQ.totalAmount)}</b>
-                  </div>
-                  <div style="display: flex; gap: 4px;">
-                    <button class="btn btn-sm btn-secondary" onclick="viewQuotation(${oldQ.id})"><i class="fa-solid fa-eye"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteQuotation(${oldQ.id})"><i class="fa-solid fa-trash"></i></button>
-                  </div>
-                </div>
-              `).join('')}
+          ${item.location ? `<div style="font-size: 12.5px; color: #64748b;"><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> 地點: ${item.location}</div>` : ''}
+          ${item.details ? `<div class="history-item-body"><i class="fa-regular fa-note-sticky"></i> <b>施作說明/檢修備註：</b>\n${item.details}</div>` : ''}
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; gap: 6px;">
+            <span>${item.statusUpdatedAt ? `狀態更新: ${formatDateTime(item.statusUpdatedAt)}` : `建立時間: ${formatDateTime(item.createdAt)}`}</span>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn btn-sm btn-secondary" onclick="editWorkLog(${item.id})" title="編輯此紀錄"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn btn-sm btn-gcal" onclick="addToGoogleCalendar(${item.id})" title="加到 Google 日曆"><i class="fa-brands fa-google"></i> 日曆</button>
             </div>
-          ` : ''}
+          </div>
         </div>
       `;
-    }
-
-    listEl.innerHTML = html;
+    }).join('');
   } catch (err) {
-    console.error('Error loading quotations:', err);
+    timelineEl.innerHTML = `<p style="color: var(--danger); text-align: center; padding: 24px;">載入歷史紀錄發生錯誤：${err}</p>`;
   }
 }
 
-function toggleQuotationHistory(containerId, btn) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  const isOpen = container.classList.contains('open');
-  if (isOpen) {
-    container.classList.remove('open');
-    btn.innerHTML = `<i class="fa-solid fa-clock-rotate-left"></i> 展開歷史報價紀錄`;
-  } else {
-    container.classList.add('open');
-    btn.innerHTML = `<i class="fa-solid fa-chevron-up"></i> 收合歷史報價紀錄`;
-  }
-}
-
-async function convertQuotationToPayment(quotationId, title, amount) {
-  if (!confirm(`確定要將報價單「${title}」的最終金額 ${formatCurrency(amount)} 轉入收費紀錄嗎？`)) return;
-
-  try {
-    const res = await fetch(`/api/quotations/${quotationId}/to-payment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: `報價單結算: ${title}`,
-        status: '待收款',
-        paymentMethod: '匯款'
-      })
-    });
-
-    if (res.ok) {
-      alert(`已成功將金額 ${formatCurrency(amount)} 建立於收費紀錄！`);
-      loadQuotations();
-      loadDashboard();
-    } else {
-      alert('轉入收費紀錄失敗');
-    }
-  } catch (err) {
-    console.error('Error converting to payment:', err);
-  }
-}
-
-function openQuotationModal(id = null, preSelectCustomerId = null, preSelectProjectId = null) {
-  document.getElementById('quotation-id').value = id || '';
-  document.getElementById('modal-quotation-title').innerHTML = id ? '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯報價單' : '<i class="fa-solid fa-file-circle-plus" style="color: var(--primary);"></i> 建立報價單';
-  document.getElementById('quotation-number').value = '';
-  document.getElementById('quotation-title-input').value = '';
-  document.getElementById('quotation-date').value = new Date().toISOString().slice(0, 10);
-  document.getElementById('quotation-status').value = '草稿';
-  document.getElementById('quotation-notes').value = '1. 報價有效期限 14 天。\n2. 確認簽回後開工，完工結算付清。\n3. 本報價含稅及施工責任險。';
-  
-  populateCustomerDropdowns();
-  const customerSelect = document.getElementById('quotation-customer');
-  const lockedHint = document.getElementById('quotation-customer-locked-hint');
-
-  if (preSelectCustomerId) {
-    customerSelect.value = preSelectCustomerId;
-    customerSelect.disabled = true;
-    if (lockedHint) lockedHint.style.display = 'inline';
-    filterQuotationProjects();
-  } else {
-    customerSelect.disabled = false;
-    if (lockedHint) lockedHint.style.display = 'none';
-  }
-
-  if (preSelectProjectId) {
-    const projSelect = document.getElementById('quotation-project');
-    if (projSelect) projSelect.value = preSelectProjectId;
-  } else if (!id) {
-    const projSelect = document.getElementById('quotation-project');
-    if (projSelect) projSelect.value = '';
-  }
-
-  const container = document.getElementById('quotation-items-container');
-  container.innerHTML = '';
-  addQuotationRow('標準服務項目', 1, 5000);
-  calculateQuotationTotal();
-
-  openModal('modal-quotation');
-}
-
-function addQuotationRow(name = '', qty = 1, price = 0) {
-  const container = document.getElementById('quotation-items-container');
-  const card = document.createElement('div');
-  card.className = 'quotation-item-card';
-  card.innerHTML = `
-    <div class="item-card-header">
-      <span class="item-card-num"><i class="fa-solid fa-cube" style="color: var(--primary);"></i> 品項</span>
-      <button type="button" class="btn-delete-item" onclick="this.closest('.quotation-item-card').remove(); updateQuotationItemIndices(); calculateQuotationTotal();" title="刪除此品項">
-        <i class="fa-solid fa-trash-can"></i> 刪除
-      </button>
-    </div>
-    <div>
-      <label class="item-card-label">品項 / 服務說明 <span style="color:red">*</span></label>
-      <input type="text" class="form-input item-name" value="${name ? name.replace(/"/g, '&quot;') : ''}" placeholder="例: 客廳天花板平釘木作工程 / 設備安裝" required>
-    </div>
-    <div class="item-card-grid">
-      <div>
-        <label class="item-card-label">數量</label>
-        <input type="number" class="form-input item-qty" value="${qty}" min="1" step="1" oninput="calculateQuotationTotal()">
-      </div>
-      <div>
-        <label class="item-card-label">單價 (NT$)</label>
-        <input type="number" class="form-input item-price" value="${price}" min="0" step="1" oninput="calculateQuotationTotal()">
-      </div>
-      <div class="item-subtotal-col">
-        <label class="item-card-label">小計</label>
-        <div class="item-subtotal-box">
-          <span class="item-subtotal">$0</span>
-        </div>
-      </div>
-    </div>
-  `;
-  container.appendChild(card);
-  updateQuotationItemIndices();
-  calculateQuotationTotal();
-}
-
-function updateQuotationItemIndices() {
-  const cards = document.querySelectorAll('#quotation-items-container .quotation-item-card');
-  cards.forEach((c, idx) => {
-    const numEl = c.querySelector('.item-card-num');
-    if (numEl) {
-      numEl.innerHTML = `<i class="fa-solid fa-cube" style="color: var(--primary);"></i> 品項 #${idx + 1}`;
-    }
-  });
-}
-
-function calculateQuotationTotal() {
-  const cards = document.querySelectorAll('#quotation-items-container .quotation-item-card');
-  let grandTotal = 0;
-  cards.forEach(card => {
-    const qty = parseFloat(card.querySelector('.item-qty').value) || 0;
-    const price = parseFloat(card.querySelector('.item-price').value) || 0;
-    const subtotal = qty * price;
-    const subtotalEl = card.querySelector('.item-subtotal');
-    if (subtotalEl) {
-      subtotalEl.innerText = formatCurrency(subtotal);
-    }
-    grandTotal += subtotal;
-  });
-
-  const totalDisplay = document.getElementById('quotation-total-display');
-  if (totalDisplay) {
-    totalDisplay.innerText = formatCurrency(grandTotal);
-  }
-}
-
-async function saveQuotation() {
-  const id = document.getElementById('quotation-id').value;
-  const customerSelect = document.getElementById('quotation-customer');
-  const customerId = customerSelect.value;
-  const projectIdVal = document.getElementById('quotation-project') ? document.getElementById('quotation-project').value : null;
-  const title = document.getElementById('quotation-title-input').value.trim();
-
-  if (!customerId) {
-    alert('請選擇關聯客戶！');
-    return;
-  }
-  if (!title) {
-    alert('請填寫報價單名稱！');
-    return;
-  }
-
-  const items = [];
-  const cards = document.querySelectorAll('#quotation-items-container .quotation-item-card');
-  cards.forEach(card => {
-    const name = card.querySelector('.item-name').value.trim();
-    const qty = parseFloat(card.querySelector('.item-qty').value) || 1;
-    const price = parseFloat(card.querySelector('.item-price').value) || 0;
-    if (name) {
-      items.push({
-        itemName: name,
-        quantity: qty,
-        unitPrice: price,
-        subtotal: qty * price
-      });
-    }
-  });
-
-  if (items.length === 0) {
-    alert('請至少加入一個報價品項！');
-    return;
-  }
-
-  const issueDateVal = document.getElementById('quotation-date').value;
-  const payload = {
-    id: id ? parseInt(id) : 0,
-    quotationNumber: document.getElementById('quotation-number').value.trim(),
-    customerId: parseInt(customerId),
-    projectId: projectIdVal ? parseInt(projectIdVal) : null,
-    title,
-    issueDate: issueDateVal ? new Date(issueDateVal).toISOString() : new Date().toISOString(),
-    status: document.getElementById('quotation-status').value,
-    notes: document.getElementById('quotation-notes').value.trim(),
-    items
-  };
-
-  const method = id ? 'PUT' : 'POST';
-  const url = id ? `/api/quotations/${id}` : '/api/quotations';
-
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (res.ok) {
-      closeModal('modal-quotation');
-      loadQuotations();
-    } else {
-      const errMsg = await parseErrorMessage(res, '請檢查各欄位填寫');
-      alert(`儲存報價單失敗：${errMsg}`);
-    }
-  } catch (err) {
-    alert(`儲存報價單時發生網路錯誤：${err.message || err}`);
-  }
-}
-
-async function editQuotation(id) {
-  const res = await fetch(`/api/quotations/${id}`);
-  if (!res.ok) return;
-  const q = await res.json();
-
-  document.getElementById('quotation-id').value = q.id;
-  document.getElementById('modal-quotation-title').innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯報價單';
-  document.getElementById('quotation-number').value = q.quotationNumber || '';
-  populateCustomerDropdowns();
-  
-  const customerSelect = document.getElementById('quotation-customer');
-  customerSelect.disabled = false;
-  customerSelect.value = q.customerId;
-  const lockedHint = document.getElementById('quotation-customer-locked-hint');
-  if (lockedHint) lockedHint.style.display = 'none';
-
-  filterQuotationProjects();
-  const projSelect = document.getElementById('quotation-project');
-  if (projSelect) projSelect.value = q.projectId || '';
-
-  document.getElementById('quotation-title-input').value = q.title || '';
-  document.getElementById('quotation-date').value = q.issueDate ? q.issueDate.slice(0, 10) : '';
-  document.getElementById('quotation-status').value = q.status || '草稿';
-  document.getElementById('quotation-notes').value = q.notes || '';
-
-  const container = document.getElementById('quotation-items-container');
-  container.innerHTML = '';
-  if (q.items && q.items.length > 0) {
-    q.items.forEach(i => addQuotationRow(i.itemName, i.quantity, i.unitPrice));
-  } else {
-    addQuotationRow();
-  }
-  calculateQuotationTotal();
-
-  openModal('modal-quotation');
-}
-
-async function viewQuotation(id) {
-  const res = await fetch(`/api/quotations/${id}`);
-  if (!res.ok) return;
-  const q = await res.json();
-
-  const preview = document.getElementById('quotation-preview-content');
-  preview.innerHTML = `
-    <div style="border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start;">
-      <div>
-        <h1 style="color: #2563eb; font-size: 26px; margin-bottom: 4px; font-weight: 800;"><i class="fa-solid fa-file-invoice"></i> 永 倉 管 理 - 報 價 單</h1>
-        <div style="font-size: 14px; color: #64748b;">單號：<b>${q.quotationNumber}</b></div>
-      </div>
-      <div style="text-align: right; font-size: 14px;">
-        <div>報價日期：${formatDate(q.issueDate)}</div>
-        <div>狀態：<span class="badge ${getQuotationBadgeClass(q.status)}">${q.status}</span></div>
-      </div>
-    </div>
-
-    <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
-      <h3 style="font-size: 15px; margin-bottom: 8px; color: #1e293b;"><i class="fa-solid fa-user-tie" style="color: var(--primary);"></i> 客戶資訊</h3>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
-        <div>客戶姓名：<b>${q.customer ? q.customer.name : '未指定'}</b> ${q.customer && q.customer.category ? `(${q.customer.category})` : ''}</div>
-        <div>聯絡電話：<b>${q.customer && q.customer.phone ? q.customer.phone : '無'}</b></div>
-        <div>地址/現場：${q.customer && q.customer.address ? q.customer.address : '無'}</div>
-        <div>專案名稱：<b>${q.title}</b></div>
-      </div>
-    </div>
-
-    <table class="items-table" style="margin-bottom: 20px;">
-      <thead>
-        <tr>
-          <th>品項說明</th>
-          <th style="text-align: center; width: 80px;">數量</th>
-          <th style="text-align: right; width: 120px;">單價</th>
-          <th style="text-align: right; width: 120px;">小計</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${(q.items || []).map(item => `
-          <tr>
-            <td><b>${item.itemName}</b></td>
-            <td style="text-align: center;">${item.quantity}</td>
-            <td style="text-align: right;">${formatCurrency(item.unitPrice)}</td>
-            <td style="text-align: right; font-weight: 700;">${formatCurrency(item.subtotal)}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-      <tfoot>
-        <tr style="background: #eff6ff; font-weight: 800; font-size: 16px;">
-          <td colspan="3" style="text-align: right;">報價總金額 (TWD)：</td>
-          <td style="text-align: right; color: #2563eb; font-size: 18px;">${formatCurrency(q.totalAmount)}</td>
-        </tr>
-      </tfoot>
-    </table>
-
-    ${q.notes ? `
-      <div style="font-size: 13px; color: #475569; background: #fff; border: 1px dashed #cbd5e1; padding: 12px; border-radius: 6px;">
-        <b>條款與備註說明：</b><br>
-        <div style="white-space: pre-line; margin-top: 4px;">${q.notes}</div>
-      </div>
-    ` : ''}
-
-    <div style="margin-top: 40px; display: flex; justify-content: space-between; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 14px;">
-      <div>報價立案方：永倉管理</div>
-      <div>客戶確認簽章：__________________</div>
-    </div>
-  `;
-
-  openModal('modal-quotation-view');
-}
-
-async function deleteQuotation(id) {
-  if (!confirm('確定要刪除此報價單嗎？')) return;
-  const res = await fetch(`/api/quotations/${id}`, { method: 'DELETE' });
-  if (res.ok) loadQuotations();
+function quickAddServiceFromHistory(workType) {
+  if (!currentHistoryCustomerId) return;
+  openWorkLogModal(null, currentHistoryCustomerId, null, workType);
 }
 
 // ==================== 5. 收費紀錄 (PAYMENTS) ====================

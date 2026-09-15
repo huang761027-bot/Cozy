@@ -26,26 +26,57 @@ namespace Cozy.Controllers
             var firstDayOfMonth = new DateTime(now.Year, now.Month, 1);
 
             var totalCustomers = await _context.Customers.CountAsync();
-            
-            var todayWorkLogs = await _context.WorkLogs
+
+            // 尚未完成的工程 (進行中, 待進場, 暫停 等，排除已完工與已結案) 依照日期排序
+            var pendingProjects = await _context.Projects
+                .Include(p => p.Customer)
+                .Where(p => p.Status != "已完工" && p.Status != "已結案")
+                .OrderBy(p => p.EndDate ?? p.StartDate ?? p.CreatedAt)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.ProjectNumber,
+                    p.Name,
+                    p.Status,
+                    p.Budget,
+                    p.StartDate,
+                    p.EndDate,
+                    p.Address,
+                    p.ContactPerson,
+                    p.ContactPhone,
+                    p.CreatedAt,
+                    CustomerName = p.Customer != null ? p.Customer.Name : "未指定客戶",
+                    CustomerPhone = p.Customer != null ? p.Customer.Phone : ""
+                })
+                .ToListAsync();
+
+            var pendingProjectsCount = pendingProjects.Count;
+
+            // 尚未完成/待辦之工作行程 (保養、安裝、維修等，排除已完成與已取消) 依日期排序
+            var pendingWorkLogs = await _context.WorkLogs
                 .Include(w => w.Customer)
-                .Where(w => w.ScheduledAt.Date == today)
+                .Include(w => w.Project)
+                .Where(w => w.Status != "已完成" && w.Status != "已取消")
                 .OrderByDescending(w => w.IsPriority)
                 .ThenBy(w => w.ScheduledAt)
+                .Take(25)
                 .Select(w => new
                 {
                     w.Id,
+                    w.WorkType,
                     w.Title,
                     w.ScheduledAt,
                     w.Status,
                     w.StatusUpdatedAt,
                     w.IsPriority,
-                    CustomerName = w.Customer != null ? w.Customer.Name : "未指定客戶"
+                    w.Location,
+                    CustomerName = w.Customer != null ? w.Customer.Name : "未指定客戶",
+                    CustomerPhone = w.Customer != null ? w.Customer.Phone : "",
+                    ProjectName = w.Project != null ? w.Project.Name : null
                 })
                 .ToListAsync();
 
-            var pendingWorkLogsCount = await _context.WorkLogs
-                .CountAsync(w => w.Status == "待處理" || w.Status == "進行中");
+            var pendingWorkLogsCount = pendingWorkLogs.Count;
 
             var monthRevenue = await _context.Payments
                 .Where(p => p.PaymentDate >= firstDayOfMonth && p.Status == "已收款")
@@ -76,11 +107,13 @@ namespace Cozy.Controllers
             return Ok(new
             {
                 totalCustomers,
+                pendingProjectsCount,
                 pendingWorkLogsCount,
                 monthRevenue,
                 pendingPaymentsAmount,
                 pendingPaymentsCount,
-                todayWorkLogs,
+                pendingProjects,
+                pendingWorkLogs,
                 recentPayments
             });
         }

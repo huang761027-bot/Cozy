@@ -24,20 +24,42 @@ namespace Cozy.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetWorkLogs(
             [FromQuery] int? customerId,
+            [FromQuery] int? projectId,
+            [FromQuery] string? workType,
             [FromQuery] string? status,
+            [FromQuery] bool? hideCompleted,
+            [FromQuery] bool? showAll,
             [FromQuery] DateTime? date,
             [FromQuery] string? search)
         {
-            var query = _context.WorkLogs.Include(w => w.Customer).AsQueryable();
+            var query = _context.WorkLogs
+                .Include(w => w.Customer)
+                .Include(w => w.Project)
+                .AsQueryable();
 
             if (customerId.HasValue)
             {
                 query = query.Where(w => w.CustomerId == customerId.Value);
             }
 
+            if (projectId.HasValue)
+            {
+                query = query.Where(w => w.ProjectId == projectId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(workType))
+            {
+                query = query.Where(w => w.WorkType == workType.Trim());
+            }
+
             if (!string.IsNullOrWhiteSpace(status))
             {
-                query = query.Where(w => w.Status == status);
+                query = query.Where(w => w.Status == status.Trim());
+            }
+            else if (showAll != true && hideCompleted != false)
+            {
+                // 預設排除已完成與已取消 (取消與完成就不顯示)
+                query = query.Where(w => w.Status != "已完成" && w.Status != "已取消");
             }
 
             if (date.HasValue)
@@ -50,14 +72,16 @@ namespace Cozy.Controllers
             {
                 search = search.Trim();
                 query = query.Where(w => w.Title.Contains(search) || 
+                                         (w.WorkType != null && w.WorkType.Contains(search)) ||
                                          (w.Details != null && w.Details.Contains(search)) ||
                                          (w.Location != null && w.Location.Contains(search)) ||
+                                         (w.Project != null && w.Project.Name.Contains(search)) ||
                                          (w.Customer != null && (w.Customer.Name.Contains(search) || w.Customer.Phone.Contains(search))));
             }
 
             var list = await query
                 .OrderByDescending(w => w.IsPriority)
-                .ThenByDescending(w => w.ScheduledAt)
+                .ThenBy(w => w.ScheduledAt)
                 .Select(w => new
                 {
                     w.Id,
@@ -65,6 +89,41 @@ namespace Cozy.Controllers
                     CustomerName = w.Customer != null ? w.Customer.Name : "未指定客戶",
                     CustomerPhone = w.Customer != null ? w.Customer.Phone : null,
                     CustomerCategory = w.Customer != null ? w.Customer.Category : null,
+                    w.ProjectId,
+                    ProjectName = w.Project != null ? w.Project.Name : null,
+                    w.WorkType,
+                    w.Title,
+                    w.ScheduledAt,
+                    w.Status,
+                    w.StatusUpdatedAt,
+                    w.IsPriority,
+                    w.Details,
+                    w.Location,
+                    w.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(list);
+        }
+
+        // GET: api/WorkLogs/customer/{customerId} (完整取得某客戶之保養/安裝/維修所有歷史紀錄)
+        [HttpGet("customer/{customerId}")]
+        public async Task<ActionResult<IEnumerable<object>>> GetCustomerHistory(int customerId)
+        {
+            var list = await _context.WorkLogs
+                .Include(w => w.Customer)
+                .Include(w => w.Project)
+                .Where(w => w.CustomerId == customerId)
+                .OrderByDescending(w => w.ScheduledAt)
+                .Select(w => new
+                {
+                    w.Id,
+                    w.CustomerId,
+                    CustomerName = w.Customer != null ? w.Customer.Name : "未指定客戶",
+                    CustomerPhone = w.Customer != null ? w.Customer.Phone : null,
+                    w.ProjectId,
+                    ProjectName = w.Project != null ? w.Project.Name : null,
+                    w.WorkType,
                     w.Title,
                     w.ScheduledAt,
                     w.Status,
@@ -85,6 +144,7 @@ namespace Cozy.Controllers
         {
             var workLog = await _context.WorkLogs
                 .Include(w => w.Customer)
+                .Include(w => w.Project)
                 .FirstOrDefaultAsync(w => w.Id == id);
 
             if (workLog == null)
@@ -104,6 +164,11 @@ namespace Cozy.Controllers
                 if (string.IsNullOrWhiteSpace(workLog.Title))
                 {
                     return BadRequest(new { message = "工作標題為必填項目" });
+                }
+
+                if (string.IsNullOrWhiteSpace(workLog.WorkType))
+                {
+                    workLog.WorkType = "保養";
                 }
 
                 if (workLog.ScheduledAt == default)
@@ -185,6 +250,8 @@ namespace Cozy.Controllers
                 }
 
                 existing.CustomerId = workLog.CustomerId;
+                existing.ProjectId = workLog.ProjectId;
+                existing.WorkType = string.IsNullOrWhiteSpace(workLog.WorkType) ? "保養" : workLog.WorkType;
                 existing.Title = workLog.Title;
                 existing.ScheduledAt = workLog.ScheduledAt != default ? workLog.ScheduledAt : existing.ScheduledAt;
                 existing.Status = string.IsNullOrWhiteSpace(workLog.Status) ? "待處理" : workLog.Status;

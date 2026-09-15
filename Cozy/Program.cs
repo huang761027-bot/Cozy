@@ -153,6 +153,7 @@ using (var scope = app.Services.CreateScope())
             try { db.Database.ExecuteSqlRaw("ALTER TABLE `ProjectFiles` ADD COLUMN `FileSizeBytes` bigint NOT NULL DEFAULT 0;"); } catch {}
             try { db.Database.ExecuteSqlRaw("ALTER TABLE `ProjectFiles` ADD COLUMN `Description` varchar(255) NULL;"); } catch {}
             try { db.Database.ExecuteSqlRaw("ALTER TABLE `WorkLogs` ADD COLUMN `ProjectId` int NULL;"); } catch {}
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE `WorkLogs` ADD COLUMN `WorkType` varchar(50) NOT NULL DEFAULT '保養';"); } catch {}
             try { db.Database.ExecuteSqlRaw("ALTER TABLE `WorkLogs` ADD COLUMN `IsPriority` tinyint(1) NOT NULL DEFAULT 0;"); } catch {}
             try { db.Database.ExecuteSqlRaw("ALTER TABLE `WorkLogs` ADD COLUMN `StatusUpdatedAt` datetime(6) NULL;"); } catch {}
             try { db.Database.ExecuteSqlRaw("ALTER TABLE `Quotations` ADD COLUMN `ProjectId` int NULL;"); } catch {}

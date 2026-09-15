@@ -181,10 +181,6 @@
         <i class="fa-solid fa-calendar-check"></i>
         <span>工作行程</span>
       </a>
-      <a class="nav-item" data-tab="quotations">
-        <i class="fa-solid fa-file-invoice-dollar"></i>
-        <span>報價管理</span>
-      </a>
       <a class="nav-item" data-tab="payments">
         <i class="fa-solid fa-wallet"></i>
         <span>收費紀錄</span>
@@ -195,7 +191,7 @@
       </a>
     </nav>
     <div style="margin-top: auto; font-size: 12px; color: #64748b; text-align: center;">
-      永倉管理系統 v2.0
+      永倉管理系統 v2.6
     </div>
   </aside>
 
@@ -226,20 +222,30 @@
       </div>
     </header>
 
-    <!-- SECTION 1: 總覽管理 (Dashboard) -->
+    <!-- SECTION 1: 總覽管理 (Dashboard) - 以尚未完成的工程依日期排序為核心 -->
     <section id="view-dashboard" class="content-view">
       <div class="stats-grid">
-        <div class="stat-card">
+        <div class="stat-card" style="cursor: pointer;" onclick="switchTab('projects')">
           <div class="stat-info">
-            <span class="stat-label">總客戶數</span>
-            <span class="stat-value" id="stat-total-customers">0</span>
+            <span class="stat-label">尚未完工工程</span>
+            <span class="stat-value" style="color: var(--primary);" id="stat-pending-projects">0</span>
           </div>
           <div class="stat-icon-wrapper stat-icon-primary">
-            <i class="fa-solid fa-users"></i>
+            <i class="fa-solid fa-person-digging"></i>
           </div>
         </div>
 
-        <div class="stat-card">
+        <div class="stat-card" style="cursor: pointer;" onclick="switchTab('worklogs')">
+          <div class="stat-info">
+            <span class="stat-label">待辦/進行中行程</span>
+            <span class="stat-value" style="color: #0284c7;" id="stat-pending-tasks">0</span>
+          </div>
+          <div class="stat-icon-wrapper stat-icon-info">
+            <i class="fa-solid fa-calendar-check"></i>
+          </div>
+        </div>
+
+        <div class="stat-card" style="cursor: pointer;" onclick="switchTab('payments')">
           <div class="stat-info">
             <span class="stat-label">本月已收款</span>
             <span class="stat-value" style="color: var(--success);" id="stat-month-revenue">$0</span>
@@ -249,7 +255,7 @@
           </div>
         </div>
 
-        <div class="stat-card">
+        <div class="stat-card" style="cursor: pointer;" onclick="switchTab('payments')">
           <div class="stat-info">
             <span class="stat-label">待收款總額</span>
             <span class="stat-value" style="color: var(--warning);" id="stat-pending-payments">$0</span>
@@ -258,37 +264,48 @@
             <i class="fa-solid fa-clock-rotate-left"></i>
           </div>
         </div>
-
-        <div class="stat-card">
-          <div class="stat-info">
-            <span class="stat-label">進行中/待辦行程</span>
-            <span class="stat-value" id="stat-pending-tasks">0</span>
-          </div>
-          <div class="stat-icon-wrapper stat-icon-info">
-            <i class="fa-solid fa-calendar-check"></i>
-          </div>
-        </div>
       </div>
 
-      <!-- Today's Schedule & Recent Payments -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+      <!-- Dashboard Main Content Sections -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- 🚧 尚未完成的工程案場 (依照預計完工/開工日期排序) -->
         <div class="card">
-          <div class="card-header">
-            <h2 class="card-title"><i class="fa-solid fa-calendar-day" style="color: var(--primary);"></i> 今日工作行程</h2>
-            <span style="font-size: 12px; color: var(--text-muted);">（由客戶資料中產生）</span>
+          <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
+            <div>
+              <h2 class="card-title"><i class="fa-solid fa-person-digging" style="color: var(--primary);"></i> 尚未完成之工程案場 <span class="badge badge-primary" id="badge-pending-projects-count" style="font-size: 12px; margin-left: 6px;">0 案</span></h2>
+              <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 3px;">依照預計完工日 / 進場開工日由近到遠排序，隨時掌握工程進度</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-primary" onclick="openProjectModal()"><i class="fa-solid fa-plus"></i> 新增專案案場</button>
+            </div>
           </div>
-          <div id="today-worklogs-list" class="item-list">
-            <p style="color: var(--text-muted); text-align: center; padding: 24px;">今日尚無排定行程</p>
+          <div id="dashboard-pending-projects-list" class="item-list">
+            <p style="color: var(--text-muted); text-align: center; padding: 28px;">載入中...</p>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title"><i class="fa-solid fa-receipt" style="color: var(--success);"></i> 近期收費紀錄</h2>
-            <button class="btn btn-sm btn-success" onclick="openPaymentModal()"><i class="fa-solid fa-plus"></i> 新增收費</button>
+        <!-- 2 Column Layout: 待辦行程工單 + 近期收費紀錄 -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px;">
+          <!-- 📅 待辦/進行中行程與工單 (保養/安裝/維修) -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title"><i class="fa-solid fa-calendar-check" style="color: #0284c7;"></i> 待辦/進行中行程與工單</h2>
+              <button class="btn btn-sm btn-primary" onclick="openWorkLogModal()"><i class="fa-solid fa-plus"></i> 排定行程</button>
+            </div>
+            <div id="dashboard-pending-worklogs-list" class="item-list">
+              <p style="color: var(--text-muted); text-align: center; padding: 24px;">尚無待辦行程工單</p>
+            </div>
           </div>
-          <div id="recent-payments-list" class="item-list">
-            <p style="color: var(--text-muted); text-align: center; padding: 24px;">尚無收費紀錄</p>
+
+          <!-- 💳 近期收費紀錄 -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title"><i class="fa-solid fa-receipt" style="color: var(--success);"></i> 近期收費紀錄</h2>
+              <button class="btn btn-sm btn-success" onclick="openPaymentModal()"><i class="fa-solid fa-plus"></i> 新增收費</button>
+            </div>
+            <div id="recent-payments-list" class="item-list">
+              <p style="color: var(--text-muted); text-align: center; padding: 24px;">尚無收費紀錄</p>
+            </div>
           </div>
         </div>
       </div>
@@ -344,52 +361,37 @@
       </div>
     </section>
 
-    <!-- SECTION 3: 工作行程 (WorkLogs) -->
+    <!-- SECTION 3: 工作行程 (WorkLogs) - 支援保養/安裝/維修三類紀錄 -->
     <section id="view-worklogs" class="content-view" style="display: none;">
       <div class="filter-bar">
         <div class="search-input-wrapper">
           <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="text" id="worklog-search" class="search-input" placeholder="搜尋行程內容、客戶姓名、電話、地點..." oninput="debounce(loadWorkLogs, 300)()">
+          <input type="text" id="worklog-search" class="search-input" placeholder="搜尋行程項目、工作說明、客戶姓名、電話、地點..." oninput="debounce(loadWorkLogs, 300)()">
         </div>
+        <select id="worklog-type-filter" class="select-input" onchange="loadWorkLogs()">
+          <option value="">全部工作類型</option>
+          <option value="保養">🔧 保養</option>
+          <option value="安裝">📦 安裝</option>
+          <option value="維修">🛠️ 維修</option>
+          <option value="其他">📋 其他</option>
+        </select>
         <select id="worklog-status-filter" class="select-input" onchange="loadWorkLogs()">
-          <option value="">全部狀態</option>
+          <option value="incomplete" selected>未完成 (待處理 / 進行中)</option>
+          <option value="all">全部狀態 (含已完成/已取消)</option>
           <option value="待處理">待處理</option>
           <option value="進行中">進行中</option>
           <option value="已完成">已完成</option>
           <option value="已取消">已取消</option>
         </select>
+        <button class="btn btn-primary" onclick="openWorkLogModal()">
+          <i class="fa-solid fa-calendar-plus"></i> 新增行程工單
+        </button>
         <button class="btn btn-secondary" onclick="exportWorkLogsCalendar()" title="下載或訂閱 iCal 行事曆">
           <i class="fa-solid fa-calendar-days"></i> 訂閱行事曆 (.ics)
         </button>
-        <span style="font-size: 13px; color: var(--text-muted); margin-left: auto;">
-          💡 提示：工作行程由「客戶資料」中產生，在此直接點擊即可變更狀態
-        </span>
       </div>
       <div id="worklogs-list" class="item-list">
         <!-- Work logs rendered by JS -->
-      </div>
-    </section>
-
-    <!-- SECTION 4: 報價管理 (Quotations) -->
-    <section id="view-quotations" class="content-view" style="display: none;">
-      <div class="filter-bar">
-        <div class="search-input-wrapper">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="text" id="quotation-search" class="search-input" placeholder="搜尋報價單號、標題、客戶姓名..." oninput="debounce(loadQuotations, 300)()">
-        </div>
-        <select id="quotation-status-filter" class="select-input" onchange="loadQuotations()">
-          <option value="">全部狀態</option>
-          <option value="草稿">草稿</option>
-          <option value="已發送">已發送</option>
-          <option value="客戶確認">客戶確認</option>
-          <option value="已結案">已結案</option>
-        </select>
-        <span style="font-size: 13px; color: var(--text-muted); margin-left: auto;">
-          💡 提示：報價單由「客戶資料」中產生，預設顯示最新紀錄，舊紀錄可收合展開
-        </span>
-      </div>
-      <div id="quotations-list" class="item-list">
-        <!-- Quotations grouped & rendered by JS -->
       </div>
     </section>
 
@@ -458,10 +460,6 @@
     <a class="mobile-nav-item" data-tab="worklogs">
       <i class="fa-solid fa-calendar-check icon"></i>
       <span>行程</span>
-    </a>
-    <a class="mobile-nav-item" data-tab="quotations">
-      <i class="fa-solid fa-file-invoice-dollar icon"></i>
-      <span>報價</span>
     </a>
     <a class="mobile-nav-item" data-tab="payments">
       <i class="fa-solid fa-wallet icon"></i>
@@ -686,18 +684,43 @@
   </div>
 </div>
 
-<!-- WorkLog Modal (產生 / 編輯工作行程 - 支援語音) -->
+<!-- WorkLog Modal (產生 / 編輯工作行程 - 支援保養/安裝/維修與語音) -->
 <div id="modal-worklog" class="modal-backdrop" style="display: none;">
-  <div class="modal">
+  <div class="modal modal-lg">
     <div class="modal-header">
-      <h3 class="modal-title" id="modal-worklog-title"><i class="fa-solid fa-calendar-plus" style="color: var(--primary);"></i> 排定工作行程</h3>
+      <h3 class="modal-title" id="modal-worklog-title"><i class="fa-solid fa-calendar-plus" style="color: var(--primary);"></i> 排定工作行程 / 保修工單</h3>
       <button class="close-btn" onclick="closeModal('modal-worklog')">&times;</button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="worklog-id">
+      
+      <!-- 工作紀錄類型 (保養 / 安裝 / 維修 / 其他) -->
+      <div class="form-group">
+        <label>工作紀錄類型 <span style="color:red">* (必選)</span></label>
+        <div class="worktype-pill-selector">
+          <label class="worktype-pill-label">
+            <input type="radio" name="worklog-type-radio" value="保養" checked onchange="handleWorkTypeChange(this.value)">
+            <span class="worktype-pill pill-maintenance"><i class="fa-solid fa-wrench"></i> 🔧 保養</span>
+          </label>
+          <label class="worktype-pill-label">
+            <input type="radio" name="worklog-type-radio" value="安裝" onchange="handleWorkTypeChange(this.value)">
+            <span class="worktype-pill pill-installation"><i class="fa-solid fa-box"></i> 📦 安裝</span>
+          </label>
+          <label class="worktype-pill-label">
+            <input type="radio" name="worklog-type-radio" value="維修" onchange="handleWorkTypeChange(this.value)">
+            <span class="worktype-pill pill-repair"><i class="fa-solid fa-screwdriver-wrench"></i> 🛠️ 維修</span>
+          </label>
+          <label class="worktype-pill-label">
+            <input type="radio" name="worklog-type-radio" value="其他" onchange="handleWorkTypeChange(this.value)">
+            <span class="worktype-pill pill-other"><i class="fa-solid fa-list-check"></i> 📋 其他</span>
+          </label>
+        </div>
+        <input type="hidden" id="worklog-type" value="保養">
+      </div>
+
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
-          <label>關聯客戶 <span id="worklog-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none;">(已鎖定客戶)</span></label>
+          <label>關聯客戶 <span id="worklog-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none; font-weight:700;">(已指定客戶)</span></label>
           <select id="worklog-customer" class="select-input" onchange="filterWorkLogProjects()">
             <option value="">-- 無關聯客戶 / 內部行程 --</option>
           </select>
@@ -709,35 +732,39 @@
           </select>
         </div>
       </div>
+
       <div class="form-group">
-        <label>工作標題 / 任務名稱 *</label>
+        <label>工作標題 / 任務名稱 <span style="color:red">* (必填)</span></label>
         <div class="input-mic-group">
-          <input type="text" id="worklog-title-input" class="form-input" placeholder="例: 現場丈量 / 設備安裝 / 驗收" required>
+          <input type="text" id="worklog-title-input" class="form-input" placeholder="例: 定期冷氣濾網清潔保養 / 設備安裝 / 現場修復" required>
           <button type="button" class="btn-mic" onclick="startFieldVoiceInput('worklog-title-input', this)" title="點擊語音說出工作標題"><i class="fa-solid fa-microphone"></i></button>
         </div>
       </div>
+
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
-          <label>預定時間 *</label>
+          <label>預定時間 <span style="color:red">*</span></label>
           <input type="datetime-local" id="worklog-time" class="form-input" required>
         </div>
         <div class="form-group">
           <label>行程狀態</label>
           <select id="worklog-status" class="select-input">
-            <option value="待處理">待處理</option>
+            <option value="待處理" selected>待處理</option>
             <option value="進行中">進行中</option>
             <option value="已完成">已完成</option>
             <option value="已取消">已取消</option>
           </select>
         </div>
       </div>
+
       <div class="form-group">
         <label>地點 / 地址</label>
         <div class="input-mic-group">
-          <input type="text" id="worklog-location" class="form-input" placeholder="例: 客戶地址 或 辦公室">
+          <input type="text" id="worklog-location" class="form-input" placeholder="例: 客戶地址 或 現場地點">
           <button type="button" class="btn-mic" onclick="startFieldVoiceInput('worklog-location', this)" title="點擊語音說出地點"><i class="fa-solid fa-microphone"></i></button>
         </div>
       </div>
+
       <div class="form-group priority-checkbox-group">
         <label class="priority-checkbox-label">
           <input type="checkbox" id="worklog-is-priority">
@@ -746,111 +773,70 @@
       </div>
 
       <div class="form-group">
-        <label>詳細內容 / 施工說明</label>
+        <label>詳細內容 / 施工說明 / 檢修備註</label>
         <div class="input-mic-group" style="align-items: flex-start;">
-          <textarea id="worklog-details" class="form-textarea" rows="3" placeholder="備註施工細節、注意事項、需要攜帶的工具..."></textarea>
+          <textarea id="worklog-details" class="form-textarea" rows="3" placeholder="備註保養項目、更換零件、異常故障原因或施工細節..."></textarea>
           <button type="button" class="btn-mic" onclick="startFieldVoiceInput('worklog-details', this)" title="點擊語音說出詳細內容" style="margin-top: 2px;"><i class="fa-solid fa-microphone"></i></button>
         </div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-worklog')">取消</button>
-      <button class="btn btn-primary" onclick="saveWorkLog()"><i class="fa-solid fa-check"></i> 儲存行程</button>
+      <button class="btn btn-primary" onclick="saveWorkLog()"><i class="fa-solid fa-check"></i> 儲存行程紀錄</button>
     </div>
   </div>
 </div>
 
-<!-- Quotation Modal (產生 / 編輯報價單 - 不使用語音) -->
-<div id="modal-quotation" class="modal-backdrop" style="display: none;">
-  <div class="modal" style="max-width: 750px;">
+<!-- Customer Service History Modal (客戶保養/安裝/維修完整歷史紀錄歷程) -->
+<div id="modal-customer-history" class="modal-backdrop" style="display: none;">
+  <div class="modal modal-lg">
     <div class="modal-header">
-      <h3 class="modal-title" id="modal-quotation-title"><i class="fa-solid fa-file-circle-plus" style="color: var(--primary);"></i> 建立報價單</h3>
-      <button class="close-btn" onclick="closeModal('modal-quotation')">&times;</button>
+      <div>
+        <h3 class="modal-title" id="customer-history-title"><i class="fa-solid fa-clipboard-list" style="color: var(--primary);"></i> 客戶保修歷史紀錄歷程</h3>
+        <p id="customer-history-subtitle" style="font-size: 13px; color: var(--text-muted); margin-top: 2px;"></p>
+      </div>
+      <button class="close-btn" onclick="closeModal('modal-customer-history')">&times;</button>
     </div>
     <div class="modal-body">
-      <input type="hidden" id="quotation-id">
-      
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-        <div class="form-group">
-          <label>關聯客戶 * <span id="quotation-customer-locked-hint" style="font-size:12px; color:var(--primary); display:none;">(已鎖定客戶)</span></label>
-          <select id="quotation-customer" class="select-input" required onchange="filterQuotationProjects()">
-            <option value="">-- 請選擇客戶 --</option>
-          </select>
+      <!-- Summary Counts Bar -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px;">
+        <div class="history-count-badge badge-all">
+          <span class="count-num" id="hist-count-total">0</span>
+          <span class="count-lbl">總服務次數</span>
         </div>
-        <div class="form-group">
-          <label>關聯專案 / 案場 <span style="font-size:12px; color:var(--text-muted); font-weight:normal;">(選填)</span></label>
-          <select id="quotation-project" class="select-input">
-            <option value="">-- 無關聯專案 --</option>
-          </select>
+        <div class="history-count-badge badge-maint">
+          <span class="count-num" id="hist-count-maint">0</span>
+          <span class="count-lbl">🔧 保養</span>
         </div>
-      </div>
-
-      <div class="form-group">
-        <label>報價單名稱 / 專案主題 *</label>
-        <input type="text" id="quotation-title-input" class="form-input" placeholder="例: 室內設計裝修工程報價" required>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
-        <div class="form-group">
-          <label>報價單號 (留空自動編號)</label>
-          <input type="text" id="quotation-number" class="form-input" placeholder="例: QT-20260904-001">
+        <div class="history-count-badge badge-inst">
+          <span class="count-num" id="hist-count-inst">0</span>
+          <span class="count-lbl">📦 安裝</span>
         </div>
-        <div class="form-group">
-          <label>報價日期</label>
-          <input type="date" id="quotation-date" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>狀態</label>
-          <select id="quotation-status" class="select-input">
-            <option value="草稿">草稿</option>
-            <option value="已發送">已發送</option>
-            <option value="客戶確認">客戶確認</option>
-            <option value="已結案">已結案</option>
-          </select>
+        <div class="history-count-badge badge-repair">
+          <span class="count-num" id="hist-count-repair">0</span>
+          <span class="count-lbl">🛠️ 維修</span>
         </div>
       </div>
 
-      <!-- Items Container (Card List) -->
-      <div class="form-group">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <label><b>報價品項明細</b></label>
-          <button type="button" class="btn btn-sm btn-secondary" onclick="addQuotationRow()"><i class="fa-solid fa-plus"></i> 增加品項</button>
+      <!-- Quick Action Bar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+        <div style="font-size: 13.5px; font-weight: 700; color: #334155;">
+          <i class="fa-solid fa-clock-rotate-left"></i> 歷史紀錄時間軸（由新到舊）
         </div>
-        
-        <div id="quotation-items-container" class="quotation-items-container">
-          <!-- Dynamic quotation item cards will be added here -->
-        </div>
-
-        <div class="quotation-total-banner">
-          <span><i class="fa-solid fa-calculator"></i> 報價總計金額：</span>
-          <span id="quotation-total-display">$0</span>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-sm btn-action-maint" onclick="quickAddServiceFromHistory('保養')"><i class="fa-solid fa-plus"></i> 新增保養</button>
+          <button class="btn btn-sm btn-action-inst" onclick="quickAddServiceFromHistory('安裝')"><i class="fa-solid fa-plus"></i> 新增安裝</button>
+          <button class="btn btn-sm btn-action-repair" onclick="quickAddServiceFromHistory('維修')"><i class="fa-solid fa-plus"></i> 新增維修</button>
         </div>
       </div>
 
-      <div class="form-group">
-        <label>條款或備註說明</label>
-        <textarea id="quotation-notes" class="form-textarea" rows="2" placeholder="例: 報價有效期限 14 天，確定後支付訂金 30%..."></textarea>
+      <!-- Timeline Container -->
+      <div id="customer-history-timeline" class="history-timeline-container">
+        <!-- Rendered by JS -->
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-quotation')">取消</button>
-      <button class="btn btn-primary" onclick="saveQuotation()"><i class="fa-solid fa-check"></i> 儲存報價單</button>
-    </div>
-  </div>
-</div>
-
-<!-- Quotation Print Preview Modal -->
-<div id="modal-quotation-view" class="modal-backdrop" style="display: none;">
-  <div class="modal" style="max-width: 800px;">
-    <div class="modal-header no-print">
-      <h3 class="modal-title"><i class="fa-solid fa-file-invoice" style="color: var(--primary);"></i> 永倉管理 - 報價單預覽</h3>
-      <div style="display: flex; gap: 8px;">
-        <button class="btn btn-sm btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> 列印 / 轉存 PDF</button>
-        <button class="close-btn" onclick="closeModal('modal-quotation-view')">&times;</button>
-      </div>
-    </div>
-    <div class="modal-body" id="quotation-preview-content" style="padding: 28px;">
-      <!-- Dynamic Quotation Preview -->
+      <button class="btn btn-secondary" onclick="closeModal('modal-customer-history')">關閉</button>
     </div>
   </div>
 </div>

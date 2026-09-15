@@ -1479,3 +1479,240 @@ body {
   color: #1d4ed8;
 }
 
+/* ==========================================
+   🔧 保養 / 安裝 / 維修 標籤與樣式 (WorkType Badges & Pills)
+   ========================================== */
+.badge-worktype-maint {
+  background-color: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  font-weight: 700;
+}
+
+.badge-worktype-inst {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-weight: 700;
+}
+
+.badge-worktype-repair {
+  background-color: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  font-weight: 700;
+}
+
+.badge-worktype-other {
+  background-color: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  font-weight: 700;
+}
+
+/* WorkType Pill Selector (Modal) */
+.worktype-pill-selector {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .worktype-pill-selector {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.worktype-pill-label {
+  cursor: pointer;
+  margin: 0;
+}
+
+.worktype-pill-label input[type="radio"] {
+  display: none;
+}
+
+.worktype-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 2px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13.5px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.worktype-pill-label input[type="radio"]:checked + .worktype-pill.pill-maintenance {
+  border-color: #059669;
+  background: #ecfdf5;
+  color: #065f46;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.worktype-pill-label input[type="radio"]:checked + .worktype-pill.pill-installation {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1e40af;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+.worktype-pill-label input[type="radio"]:checked + .worktype-pill.pill-repair {
+  border-color: #d97706;
+  background: #fffbeb;
+  color: #92400e;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
+
+.worktype-pill-label input[type="radio"]:checked + .worktype-pill.pill-other {
+  border-color: #64748b;
+  background: #f1f5f9;
+  color: #1e293b;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.2);
+}
+
+/* Action Buttons */
+.btn-action-history {
+  background: #f8fafc;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+.btn-action-history:hover {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.btn-action-maint {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+.btn-action-maint:hover {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.btn-action-inst {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.btn-action-inst:hover {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.btn-action-repair {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+.btn-action-repair:hover {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* Customer Service History Modal & Timeline */
+.history-count-badge {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-shadow: var(--shadow-xs);
+}
+.history-count-badge .count-num {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+.history-count-badge .count-lbl {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-weight: 600;
+}
+.history-count-badge.badge-all .count-num { color: #0f172a; }
+.history-count-badge.badge-maint .count-num { color: #047857; }
+.history-count-badge.badge-inst .count-num { color: #1d4ed8; }
+.history-count-badge.badge-repair .count-num { color: #b45309; }
+
+.history-timeline-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding: 4px 4px 10px 4px;
+}
+
+.history-timeline-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #94a3b8;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: var(--shadow-xs);
+  transition: all 0.2s ease;
+}
+
+.history-timeline-item:hover {
+  border-color: #cbd5e1;
+  box-shadow: var(--shadow-sm);
+}
+
+.history-timeline-item.item-maint { border-left-color: #10b981; }
+.history-timeline-item.item-inst { border-left-color: #3b82f6; }
+.history-timeline-item.item-repair { border-left-color: #f59e0b; }
+.history-timeline-item.item-other { border-left-color: #64748b; }
+
+.history-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.history-item-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.history-item-date {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.history-item-body {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+

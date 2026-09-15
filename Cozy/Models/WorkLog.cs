@@ -19,6 +19,9 @@ namespace Cozy.Models
         [ForeignKey("ProjectId")]
         public Project? Project { get; set; }
 
+        [MaxLength(50)]
+        public string WorkType { get; set; } = "保養"; // 保養, 安裝, 維修, 其他
+
         [Required]
         [MaxLength(200)]
         public string Title { get; set; } = string.Empty;
