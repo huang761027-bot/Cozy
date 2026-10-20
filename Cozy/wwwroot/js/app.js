@@ -7,6 +7,22 @@ let projectsCache = [];
 let quotationsCache = [];
 let projectStagedFiles = [];
 
+// 將使用者輸入的文字轉成安全的 HTML 文字（防止 XSS）
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// 產生可安全放入 onclick="..." 屬性中的 JS 字串參數
+function jsArg(value) {
+  return escapeHtml(JSON.stringify(value === null || value === undefined ? '' : String(value)));
+}
+
 // Service Worker for PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -232,17 +248,17 @@ async function loadDashboard() {
             <div class="list-item-top">
               <div class="list-item-info">
                 <div class="list-item-title" style="flex-wrap: wrap; gap: 6px;">
-                  <span class="project-number-badge"><i class="fa-solid fa-hashtag"></i> ${p.projectNumber || 'PRJ'}</span>
-                  <span style="font-size: 16.5px; font-weight: 800; color: #1e293b;">${p.name}</span>
-                  <span class="badge ${getProjectStatusBadgeClass(p.status)}">${p.status}</span>
+                  <span class="project-number-badge"><i class="fa-solid fa-hashtag"></i> ${escapeHtml(p.projectNumber || 'PRJ')}</span>
+                  <span style="font-size: 16.5px; font-weight: 800; color: #1e293b;">${escapeHtml(p.name)}</span>
+                  <span class="badge ${getProjectStatusBadgeClass(p.status)}">${escapeHtml(p.status)}</span>
                   ${p.budget ? `<span style="font-weight: 800; color: var(--success); margin-left: 4px;">預算: ${formatCurrency(p.budget)}</span>` : ''}
                 </div>
                 <div class="list-item-sub" style="margin-top: 6px;">
-                  <span><i class="fa-solid fa-user"></i> <b>${p.customerName}</b> ${p.customerPhone ? '(' + p.customerPhone + ')' : ''}</span>
+                  <span><i class="fa-solid fa-user"></i> <b>${escapeHtml(p.customerName)}</b> ${p.customerPhone ? '(' + escapeHtml(p.customerPhone) + ')' : ''}</span>
                   ${p.endDate ? `<span style="color: #dc2626; font-weight: 700;"><i class="fa-solid fa-flag-checkered"></i> 預計完工: ${formatDate(p.endDate)}</span>` : ''}
                   ${p.startDate ? `<span><i class="fa-regular fa-calendar-plus"></i> 開工: ${formatDate(p.startDate)}</span>` : ''}
-                  ${p.address ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${p.address}</span>` : ''}
-                  ${p.contactPerson ? `<span><i class="fa-solid fa-id-badge"></i> 現場: ${p.contactPerson} ${p.contactPhone || ''}</span>` : ''}
+                  ${p.address ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${escapeHtml(p.address)}</span>` : ''}
+                  ${p.contactPerson ? `<span><i class="fa-solid fa-id-badge"></i> 現場: ${escapeHtml(p.contactPerson)} ${escapeHtml(p.contactPhone)}</span>` : ''}
                 </div>
               </div>
               <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
@@ -269,14 +285,14 @@ async function loadDashboard() {
                 <div class="list-item-title">
                   ${getWorkTypeBadgeHtml(w.workType)}
                   ${w.isPriority ? '<span class="badge badge-priority"><i class="fa-solid fa-star"></i> 優先 (*)</span>' : ''}
-                  <span>${w.title}</span>
-                  <span class="badge ${getStatusBadgeClass(w.status)}">${w.status}</span>
+                  <span>${escapeHtml(w.title)}</span>
+                  <span class="badge ${getStatusBadgeClass(w.status)}">${escapeHtml(w.status)}</span>
                 </div>
                 <div class="list-item-sub">
                   <span><i class="fa-regular fa-clock"></i> 預定: ${formatDateTime(w.scheduledAt)}</span>
-                  <span><i class="fa-solid fa-user"></i> <b>${w.customerName}</b></span>
-                  ${w.projectName ? `<span style="color: var(--primary);">[${w.projectName}]</span>` : ''}
-                  ${w.location ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${w.location}</span>` : ''}
+                  <span><i class="fa-solid fa-user"></i> <b>${escapeHtml(w.customerName)}</b></span>
+                  ${w.projectName ? `<span style="color: var(--primary);">[${escapeHtml(w.projectName)}]</span>` : ''}
+                  ${w.location ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${escapeHtml(w.location)}</span>` : ''}
                 </div>
               </div>
               <div style="display: flex; gap: 4px; align-items: center;">
@@ -301,13 +317,13 @@ async function loadDashboard() {
               <div class="list-item-info">
                 <div class="list-item-title">
                   <i class="fa-solid fa-receipt" style="color: var(--success);"></i>
-                  <span>${p.title}</span>
+                  <span>${escapeHtml(p.title)}</span>
                   <span style="color: var(--success); font-weight: 800; margin-left: 4px;">+${formatCurrency(p.amount)}</span>
                 </div>
                 <div class="list-item-sub">
                   <span><i class="fa-regular fa-calendar"></i> ${formatDate(p.paymentDate)}</span>
-                  <span><i class="fa-solid fa-user"></i> ${p.customerName}</span>
-                  <span class="badge ${p.status === '已收款' ? 'badge-success' : 'badge-warning'}">${p.status}</span>
+                  <span><i class="fa-solid fa-user"></i> ${escapeHtml(p.customerName)}</span>
+                  <span class="badge ${p.status === '已收款' ? 'badge-success' : 'badge-warning'}">${escapeHtml(p.status)}</span>
                 </div>
               </div>
             </div>
@@ -346,20 +362,20 @@ async function loadCustomers() {
           <div class="list-item-info">
             <div class="list-item-title">
               <i class="fa-solid fa-user-tie" style="color: var(--primary);"></i>
-              <span style="font-size: 17px; font-weight: 800;">${c.name}</span>
-              <span class="badge ${getCategoryBadgeClass(c.category)}">${c.category || '個人'}</span>
+              <span style="font-size: 17px; font-weight: 800;">${escapeHtml(c.name)}</span>
+              <span class="badge ${getCategoryBadgeClass(c.category)}">${escapeHtml(c.category || '個人')}</span>
             </div>
             <div class="list-item-sub">
-              <span><i class="fa-solid fa-phone" style="color: var(--primary);"></i> <b>${c.phone}</b></span>
-              ${c.lineId ? `<span><i class="fa-brands fa-line" style="color: #00c300; font-size: 15px;"></i> LINE: ${c.lineId}</span>` : ''}
-              ${c.address ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${c.address}</span>` : ''}
-              ${c.email ? `<span><i class="fa-solid fa-envelope" style="color: #64748b;"></i> ${c.email}</span>` : ''}
+              <span><i class="fa-solid fa-phone" style="color: var(--primary);"></i> <b>${escapeHtml(c.phone)}</b></span>
+              ${c.lineId ? `<span><i class="fa-brands fa-line" style="color: #00c300; font-size: 15px;"></i> LINE: ${escapeHtml(c.lineId)}</span>` : ''}
+              ${c.address ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${escapeHtml(c.address)}</span>` : ''}
+              ${c.email ? `<span><i class="fa-solid fa-envelope" style="color: #64748b;"></i> ${escapeHtml(c.email)}</span>` : ''}
             </div>
-            ${c.notes ? `<div style="font-size: 13px; color: #475569; margin-top: 6px; background: #f8fafc; border-left: 3px solid #94a3b8; padding: 6px 10px; border-radius: 4px;"><i class="fa-regular fa-note-sticky"></i> 備註: ${c.notes}</div>` : ''}
+            ${c.notes ? `<div style="font-size: 13px; color: #475569; margin-top: 6px; background: #f8fafc; border-left: 3px solid #94a3b8; padding: 6px 10px; border-radius: 4px;"><i class="fa-regular fa-note-sticky"></i> 備註: ${escapeHtml(c.notes)}</div>` : ''}
           </div>
           <div style="display: flex; gap: 6px;">
             <button class="btn btn-sm btn-secondary" onclick="editCustomer(${c.id})" title="編輯資料"><i class="fa-solid fa-pen"></i></button>
-            <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${c.id}, '${c.name}')" title="刪除"><i class="fa-solid fa-trash"></i></button>
+            <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${c.id}, ${jsArg(c.name)})" title="刪除"><i class="fa-solid fa-trash"></i></button>
           </div>
         </div>
 
@@ -408,7 +424,7 @@ function triggerCustomerAction(customerId, actionType) {
 }
 
 function populateCustomerDropdowns() {
-  const optionsHtml = customersCache.map(c => `<option value="${c.id}">[${c.category || '個人'}] ${c.name} (${c.phone})</option>`).join('');
+  const optionsHtml = customersCache.map(c => `<option value="${c.id}">[${escapeHtml(c.category || '個人')}] ${escapeHtml(c.name)} (${escapeHtml(c.phone)})</option>`).join('');
 
   // Project Modal Customer
   const projectCustSelect = document.getElementById('project-customer-id');
@@ -455,7 +471,7 @@ function populateCustomerDropdowns() {
 
 function populateProjectDropdowns() {
   const projectOptionsHtml = projectsCache.map(p => 
-    `<option value="${p.id}">[${p.projectNumber}] ${p.name}</option>`
+    `<option value="${p.id}">[${escapeHtml(p.projectNumber)}] ${escapeHtml(p.name)}</option>`
   ).join('');
 
   const worklogProjSelect = document.getElementById('worklog-project');
@@ -478,7 +494,7 @@ function filterWorkLogProjects() {
   const filtered = custId ? projectsCache.filter(p => p.customerId == custId) : projectsCache;
   const projSelect = document.getElementById('worklog-project');
   if (projSelect) {
-    projSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + filtered.map(p => `<option value="${p.id}">[${p.projectNumber}] ${p.name}</option>`).join('');
+    projSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + filtered.map(p => `<option value="${p.id}">[${escapeHtml(p.projectNumber)}] ${escapeHtml(p.name)}</option>`).join('');
   }
 }
 
@@ -487,7 +503,7 @@ function filterPaymentProjects() {
   const filtered = custId ? projectsCache.filter(p => p.customerId == custId) : projectsCache;
   const projSelect = document.getElementById('payment-project');
   if (projSelect) {
-    projSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + filtered.map(p => `<option value="${p.id}">[${p.projectNumber}] ${p.name}</option>`).join('');
+    projSelect.innerHTML = '<option value="">-- 無關聯專案 --</option>' + filtered.map(p => `<option value="${p.id}">[${escapeHtml(p.projectNumber)}] ${escapeHtml(p.name)}</option>`).join('');
   }
 }
 
@@ -610,19 +626,19 @@ async function loadProjects() {
         <div class="list-item-top">
           <div class="list-item-info">
             <div class="list-item-title" style="flex-wrap: wrap; gap: 6px;">
-              <span class="project-number-badge"><i class="fa-solid fa-hashtag"></i> ${p.projectNumber}</span>
-              <span style="font-size: 17px; font-weight: 800; color: #1e293b;">${p.name}</span>
-              <span class="badge ${getProjectStatusBadgeClass(p.status)}">${p.status}</span>
-              <span class="badge ${getCategoryBadgeClass(p.customerCategory)}"><i class="fa-solid fa-user"></i> ${p.customerName}</span>
+              <span class="project-number-badge"><i class="fa-solid fa-hashtag"></i> ${escapeHtml(p.projectNumber)}</span>
+              <span style="font-size: 17px; font-weight: 800; color: #1e293b;">${escapeHtml(p.name)}</span>
+              <span class="badge ${getProjectStatusBadgeClass(p.status)}">${escapeHtml(p.status)}</span>
+              <span class="badge ${getCategoryBadgeClass(p.customerCategory)}"><i class="fa-solid fa-user"></i> ${escapeHtml(p.customerName)}</span>
             </div>
             <div class="list-item-sub" style="margin-top: 6px;">
-              ${p.customerPhone ? `<span><i class="fa-solid fa-phone" style="color: var(--primary);"></i> ${p.customerPhone}</span>` : ''}
-              ${p.contactPerson ? `<span><i class="fa-solid fa-user-gear"></i> 現場窗口: <b>${p.contactPerson}</b> ${p.contactPhone || ''}</span>` : ''}
-              ${p.address ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${p.address}</span>` : ''}
+              ${p.customerPhone ? `<span><i class="fa-solid fa-phone" style="color: var(--primary);"></i> ${escapeHtml(p.customerPhone)}</span>` : ''}
+              ${p.contactPerson ? `<span><i class="fa-solid fa-user-gear"></i> 現場窗口: <b>${escapeHtml(p.contactPerson)}</b> ${escapeHtml(p.contactPhone)}</span>` : ''}
+              ${p.address ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${escapeHtml(p.address)}</span>` : ''}
               ${p.budget ? `<span style="color: var(--success); font-weight: 700;"><i class="fa-solid fa-sack-dollar"></i> 預算: ${formatCurrency(p.budget)}</span>` : ''}
               ${p.startDate ? `<span><i class="fa-regular fa-calendar"></i> 進場: ${formatDate(p.startDate)}</span>` : ''}
             </div>
-            ${p.notes ? `<div style="font-size: 13px; color: #475569; margin-top: 6px; background: #f8fafc; border-left: 3px solid #6366f1; padding: 6px 10px; border-radius: 4px;"><i class="fa-regular fa-clipboard"></i> <b>施工規範/備註:</b> ${p.notes}</div>` : ''}
+            ${p.notes ? `<div style="font-size: 13px; color: #475569; margin-top: 6px; background: #f8fafc; border-left: 3px solid #6366f1; padding: 6px 10px; border-radius: 4px;"><i class="fa-regular fa-clipboard"></i> <b>施工規範/備註:</b> ${escapeHtml(p.notes)}</div>` : ''}
             
             <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
               <span class="badge ${p.fileCount > 0 ? 'badge-info' : 'badge-gray'}" style="font-size: 12px; cursor: pointer;" onclick="openProjectFilesModal(${p.id})">
@@ -633,7 +649,7 @@ async function loadProjects() {
           <div style="display: flex; gap: 6px;">
             <button class="btn btn-sm btn-action-files" onclick="openProjectFilesModal(${p.id})" title="管理附件與圖檔"><i class="fa-solid fa-paperclip"></i> 檔案庫 (${p.fileCount})</button>
             <button class="btn btn-sm btn-secondary" onclick="editProject(${p.id})" title="編輯專案"><i class="fa-solid fa-pen"></i></button>
-            <button class="btn btn-sm btn-danger" onclick="deleteProject(${p.id}, '${p.name}')" title="刪除"><i class="fa-solid fa-trash"></i></button>
+            <button class="btn btn-sm btn-danger" onclick="deleteProject(${p.id}, ${jsArg(p.name)})" title="刪除"><i class="fa-solid fa-trash"></i></button>
           </div>
         </div>
 
@@ -817,8 +833,8 @@ async function openProjectFilesModal(projectId) {
     }
     const p = await res.json();
 
-    document.getElementById('modal-project-files-title').innerHTML = `<i class="fa-solid fa-folder-open" style="color: var(--primary);"></i> 檔案附件庫 - ${p.name}`;
-    document.getElementById('modal-project-files-sub').innerText = `專案編號: ${p.projectNumber || '無'} | 關聯客戶: ${p.customer ? p.customer.name : '未指定'}`;
+    document.getElementById('modal-project-files-title').innerHTML = `<i class="fa-solid fa-folder-open" style="color: var(--primary);"></i> 檔案附件庫 - ${escapeHtml(p.name)}`;
+    document.getElementById('modal-project-files-sub').innerText = `專案編號: ${escapeHtml(p.projectNumber || '無')} | 關聯客戶: ${escapeHtml(p.customer ? p.customer.name : '未指定')}`;
     document.getElementById('project-files-total-badge').innerText = p.files ? p.files.length : 0;
 
     renderAttachedFilesList(p.files || []);
@@ -844,7 +860,7 @@ function renderAttachedFilesList(files) {
             <i class="${iconInfo.icon}"></i>
           </div>
           <div class="attached-file-meta">
-            <div class="attached-file-name" title="${f.fileName}">${f.fileName}</div>
+            <div class="attached-file-name" title="${escapeHtml(f.fileName)}">${escapeHtml(f.fileName)}</div>
             <div class="attached-file-sub">
               <span>${iconInfo.label}</span>
               <span>•</span>
@@ -855,10 +871,10 @@ function renderAttachedFilesList(files) {
           </div>
         </div>
         <div class="attached-file-actions">
-          <a href="/api/projects/files/${f.id}/download" class="btn btn-sm btn-secondary" target="_blank" download="${f.fileName}" title="下載檔案">
+          <a href="/api/projects/files/${f.id}/download" class="btn btn-sm btn-secondary" target="_blank" download="${escapeHtml(f.fileName)}" title="下載檔案">
             <i class="fa-solid fa-download"></i>
           </a>
-          <button class="btn btn-sm btn-danger" onclick="deleteProjectFile(${f.id}, '${f.fileName}')" title="刪除檔案">
+          <button class="btn btn-sm btn-danger" onclick="deleteProjectFile(${f.id}, ${jsArg(f.fileName)})" title="刪除檔案">
             <i class="fa-solid fa-trash"></i>
           </button>
         </div>
@@ -877,7 +893,7 @@ function handleProjectFilesSelect(e) {
   const listEl = document.getElementById('selected-files-list');
   listEl.innerHTML = files.map(f => `
     <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span><i class="fa-solid fa-file"></i> ${f.name}</span>
+      <span><i class="fa-solid fa-file"></i> ${escapeHtml(f.name)}</span>
       <span style="color: #64748b;">${formatFileSize(f.size)}</span>
     </div>
   `).join('');
@@ -960,7 +976,7 @@ function getWorkTypeBadgeHtml(workType) {
   } else if (type === '維修') {
     return '<span class="badge badge-worktype-repair"><i class="fa-solid fa-screwdriver-wrench"></i> 維修</span>';
   }
-  return `<span class="badge badge-worktype-other"><i class="fa-solid fa-list-check"></i> ${type}</span>`;
+  return `<span class="badge badge-worktype-other"><i class="fa-solid fa-list-check"></i> ${escapeHtml(type)}</span>`;
 }
 
 function handleWorkTypeChange(val) {
@@ -1002,18 +1018,18 @@ async function loadWorkLogs() {
             <div class="list-item-title" style="flex-wrap: wrap; gap: 6px;">
               ${getWorkTypeBadgeHtml(w.workType)}
               ${w.isPriority ? '<span class="badge badge-priority"><i class="fa-solid fa-star"></i> 優先處理 (*)</span>' : ''}
-              <span style="font-size: 16px; font-weight: 800;">${w.title}</span>
-              <span class="badge ${getStatusBadgeClass(w.status)}">${w.status}</span>
-              ${w.projectName ? `<span style="font-size: 12px; color: var(--primary); font-weight: 700;">[案場: ${w.projectName}]</span>` : ''}
-              ${w.customerCategory ? `<span class="badge ${getCategoryBadgeClass(w.customerCategory)}">${w.customerCategory}</span>` : ''}
+              <span style="font-size: 16px; font-weight: 800;">${escapeHtml(w.title)}</span>
+              <span class="badge ${getStatusBadgeClass(w.status)}">${escapeHtml(w.status)}</span>
+              ${w.projectName ? `<span style="font-size: 12px; color: var(--primary); font-weight: 700;">[案場: ${escapeHtml(w.projectName)}]</span>` : ''}
+              ${w.customerCategory ? `<span class="badge ${getCategoryBadgeClass(w.customerCategory)}">${escapeHtml(w.customerCategory)}</span>` : ''}
             </div>
             <div class="list-item-sub">
-              <span><i class="fa-solid fa-user"></i> <b>${w.customerName}</b> ${w.customerPhone ? '(' + w.customerPhone + ')' : ''}</span>
+              <span><i class="fa-solid fa-user"></i> <b>${escapeHtml(w.customerName)}</b> ${w.customerPhone ? '(' + escapeHtml(w.customerPhone) + ')' : ''}</span>
               <span><i class="fa-regular fa-clock"></i> 預定: ${formatDateTime(w.scheduledAt)}</span>
-              ${w.location ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${w.location}</span>` : ''}
+              ${w.location ? `<span><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${escapeHtml(w.location)}</span>` : ''}
               ${w.statusUpdatedAt ? `<span class="status-time-tag"><i class="fa-solid fa-clock-rotate-left"></i> 狀態更新: ${formatDateTime(w.statusUpdatedAt)}</span>` : ''}
             </div>
-            ${w.details ? `<div style="font-size: 13.5px; color: #334155; margin-top: 8px; white-space: pre-line; background: #f8fafc; border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 4px;"><i class="fa-regular fa-note-sticky"></i> <b>施工說明/檢修備註：</b>\n${w.details}</div>` : ''}
+            ${w.details ? `<div style="font-size: 13.5px; color: #334155; margin-top: 8px; white-space: pre-line; background: #f8fafc; border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 4px;"><i class="fa-regular fa-note-sticky"></i> <b>施工說明/檢修備註：</b>\n${escapeHtml(w.details)}</div>` : ''}
           </div>
           <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
             <button class="btn btn-sm btn-gcal" onclick="addToGoogleCalendar(${w.id})" title="一鍵加入個人 Google 日曆"><i class="fa-brands fa-google"></i> Google 日曆</button>
@@ -1217,12 +1233,12 @@ async function viewCustomerHistory(customerId) {
 
   document.getElementById('customer-history-title').innerHTML = `
     <i class="fa-solid fa-clipboard-list" style="color: var(--primary);"></i> 
-    <b>${custName}</b> 的保修歷史紀錄歷程
-    ${custCategory ? `<span class="badge ${getCategoryBadgeClass(custCategory)}">${custCategory}</span>` : ''}
+    <b>${escapeHtml(custName)}</b> 的保修歷史紀錄歷程
+    ${custCategory ? `<span class="badge ${getCategoryBadgeClass(custCategory)}">${escapeHtml(custCategory)}</span>` : ''}
   `;
   document.getElementById('customer-history-subtitle').innerHTML = `
-    <span><i class="fa-solid fa-phone"></i> ${custPhone || '無電話'}</span>
-    ${custAddress ? `<span style="margin-left: 12px;"><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${custAddress}</span>` : ''}
+    <span><i class="fa-solid fa-phone"></i> ${escapeHtml(custPhone || '無電話')}</span>
+    ${custAddress ? `<span style="margin-left: 12px;"><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> ${escapeHtml(custAddress)}</span>` : ''}
   `;
 
   const timelineEl = document.getElementById('customer-history-timeline');
@@ -1278,17 +1294,17 @@ async function viewCustomerHistory(customerId) {
           <div class="history-item-top">
             <div class="history-item-title">
               ${getWorkTypeBadgeHtml(type)}
-              <span>${item.title}</span>
-              <span class="badge ${getStatusBadgeClass(item.status)}">${item.status}</span>
+              <span>${escapeHtml(item.title)}</span>
+              <span class="badge ${getStatusBadgeClass(item.status)}">${escapeHtml(item.status)}</span>
               ${item.isPriority ? '<span class="badge badge-priority"><i class="fa-solid fa-star"></i> 優先</span>' : ''}
-              ${item.projectName ? `<span style="font-size: 12px; color: var(--primary); font-weight: 700;">[案場: ${item.projectName}]</span>` : ''}
+              ${item.projectName ? `<span style="font-size: 12px; color: var(--primary); font-weight: 700;">[案場: ${escapeHtml(item.projectName)}]</span>` : ''}
             </div>
             <div class="history-item-date">
               <i class="fa-regular fa-calendar-days"></i> ${formatDateTime(item.scheduledAt)}
             </div>
           </div>
-          ${item.location ? `<div style="font-size: 12.5px; color: #64748b;"><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> 地點: ${item.location}</div>` : ''}
-          ${item.details ? `<div class="history-item-body"><i class="fa-regular fa-note-sticky"></i> <b>施作說明/檢修備註：</b>\n${item.details}</div>` : ''}
+          ${item.location ? `<div style="font-size: 12.5px; color: #64748b;"><i class="fa-solid fa-location-dot" style="color: #ea580c;"></i> 地點: ${escapeHtml(item.location)}</div>` : ''}
+          ${item.details ? `<div class="history-item-body"><i class="fa-regular fa-note-sticky"></i> <b>施作說明/檢修備註：</b>\n${escapeHtml(item.details)}</div>` : ''}
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; gap: 6px;">
             <span>${item.statusUpdatedAt ? `狀態更新: ${formatDateTime(item.statusUpdatedAt)}` : `建立時間: ${formatDateTime(item.createdAt)}`}</span>
             <div style="display: flex; gap: 6px;">
@@ -1300,7 +1316,7 @@ async function viewCustomerHistory(customerId) {
       `;
     }).join('');
   } catch (err) {
-    timelineEl.innerHTML = `<p style="color: var(--danger); text-align: center; padding: 24px;">載入歷史紀錄發生錯誤：${err}</p>`;
+    timelineEl.innerHTML = `<p style="color: var(--danger); text-align: center; padding: 24px;">載入歷史紀錄發生錯誤：${escapeHtml(err)}</p>`;
   }
 }
 
@@ -1330,19 +1346,19 @@ async function loadPayments() {
           <div class="list-item-info">
             <div class="list-item-title">
               <i class="fa-solid fa-wallet" style="color: var(--success);"></i>
-              <span style="font-size: 16.5px; font-weight: 800;">${p.title}</span>
+              <span style="font-size: 16.5px; font-weight: 800;">${escapeHtml(p.title)}</span>
               <span style="color: var(--success); font-size: 18px; font-weight: 800; margin-left: 4px;">+${formatCurrency(p.amount)}</span>
-              <span class="badge ${p.status === '已收款' ? 'badge-success' : 'badge-warning'}">${p.status}</span>
-              ${p.quotationNumber ? `<span class="badge badge-info" style="font-size: 11px;"><i class="fa-solid fa-file-invoice"></i> 來自報價單 ${p.quotationNumber}</span>` : (!p.customerId ? '<span class="badge badge-gray" style="font-size: 11px;"><i class="fa-solid fa-store"></i> 散客 / 現場購買</span>' : '<span class="badge badge-gray" style="font-size: 11px;">單一產品收費</span>')}
+              <span class="badge ${p.status === '已收款' ? 'badge-success' : 'badge-warning'}">${escapeHtml(p.status)}</span>
+              ${p.quotationNumber ? `<span class="badge badge-info" style="font-size: 11px;"><i class="fa-solid fa-file-invoice"></i> 來自報價單 ${escapeHtml(p.quotationNumber)}</span>` : (!p.customerId ? '<span class="badge badge-gray" style="font-size: 11px;"><i class="fa-solid fa-store"></i> 散客 / 現場購買</span>' : '<span class="badge badge-gray" style="font-size: 11px;">單一產品收費</span>')}
             </div>
             <div class="list-item-sub">
-              <span><i class="fa-solid fa-user"></i> <b>${p.customerName}</b></span>
-              <span><i class="fa-solid fa-money-bill-transfer" style="color: #64748b;"></i> ${p.paymentMethod}</span>
+              <span><i class="fa-solid fa-user"></i> <b>${escapeHtml(p.customerName)}</b></span>
+              <span><i class="fa-solid fa-money-bill-transfer" style="color: #64748b;"></i> ${escapeHtml(p.paymentMethod)}</span>
               <span><i class="fa-regular fa-calendar"></i> ${formatDate(p.paymentDate)}</span>
-              ${p.invoiceNumber ? `<span><i class="fa-solid fa-receipt"></i> 發票: <b>${p.invoiceNumber}</b></span>` : ''}
-              ${p.invoiceImageUrl ? `<span class="invoice-attachment-tag" onclick="viewLargeImage('${p.invoiceImageUrl}')"><i class="fa-solid fa-image"></i> 檢視發票相片</span>` : ''}
+              ${p.invoiceNumber ? `<span><i class="fa-solid fa-receipt"></i> 發票: <b>${escapeHtml(p.invoiceNumber)}</b></span>` : ''}
+              ${p.invoiceImageUrl ? `<span class="invoice-attachment-tag" onclick="viewLargeImage(${jsArg(p.invoiceImageUrl)})"><i class="fa-solid fa-image"></i> 檢視發票相片</span>` : ''}
             </div>
-            ${p.notes ? `<div style="font-size: 13px; color: #64748b; margin-top: 4px;"><i class="fa-regular fa-comment-dots"></i> 備註: ${p.notes}</div>` : ''}
+            ${p.notes ? `<div style="font-size: 13px; color: #64748b; margin-top: 4px;"><i class="fa-regular fa-comment-dots"></i> 備註: ${escapeHtml(p.notes)}</div>` : ''}
           </div>
           <div style="display: flex; gap: 6px;">
             <button class="btn btn-sm btn-secondary" onclick="editPayment(${p.id})"><i class="fa-solid fa-pen"></i></button>
@@ -1537,7 +1553,7 @@ async function handleInvoiceUpload(event) {
       invoiceInput.value = scanResult.invoiceNumber;
       badgeEl.className = 'badge badge-success';
       badgeEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> 辨識成功';
-      msgEl.innerHTML = `發票號碼：<b style="color: var(--primary);">${scanResult.invoiceNumber}</b>`;
+      msgEl.innerHTML = `發票號碼：<b style="color: var(--primary);">${escapeHtml(scanResult.invoiceNumber)}</b>`;
 
       let details = [];
       if (scanResult.amount) {
@@ -1548,7 +1564,7 @@ async function handleInvoiceUpload(event) {
         }
       }
       if (scanResult.dateStr) {
-        details.push(`發票日期: ${scanResult.dateStr}`);
+        details.push(`發票日期: ${escapeHtml(scanResult.dateStr)}`);
         document.getElementById('payment-date').value = scanResult.dateStr;
       }
       subEl.innerText = details.length > 0 ? details.join(' ｜ ') : '已自動填入發票號碼，點擊縮圖可放大檢視';
@@ -2102,9 +2118,9 @@ async function loadUsers() {
           <div class="list-item-top">
             <div class="list-item-info">
               <div class="list-item-title" style="align-items: center;">
-                ${u.pictureUrl ? `<img src="${u.pictureUrl}" class="user-avatar" style="width: 28px; height: 28px;">` : '<i class="fa-solid fa-user-shield" style="color: var(--primary);"></i>'}
-                <span><b>${u.name || u.email.split('@')[0]}</b></span>
-                <span style="font-size: 13px; color: var(--text-muted); font-weight: normal;">(${u.email})</span>
+                ${u.pictureUrl ? `<img src="${escapeHtml(u.pictureUrl)}" class="user-avatar" style="width: 28px; height: 28px;">` : '<i class="fa-solid fa-user-shield" style="color: var(--primary);"></i>'}
+                <span><b>${escapeHtml(u.name || u.email.split('@')[0])}</b></span>
+                <span style="font-size: 13px; color: var(--text-muted); font-weight: normal;">(${escapeHtml(u.email)})</span>
                 ${roleBadge}
                 ${statusBadge}
                 ${isRootAdmin ? '<span class="badge badge-warning">系統創始帳號</span>' : ''}
@@ -2120,7 +2136,7 @@ async function loadUsers() {
                 <button class="btn btn-sm ${u.isActive ? 'btn-danger' : 'btn-success'}" onclick="toggleUserStatus(${u.id}, ${!u.isActive})" title="${u.isActive ? '停用此帳號' : '啟用此帳號'}">
                   ${u.isActive ? '<i class="fa-solid fa-ban"></i>' : '<i class="fa-solid fa-check"></i>'}
                 </button>
-                <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id}, '${u.email}')" title="刪除授權"><i class="fa-solid fa-trash"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id}, ${jsArg(u.email)})" title="刪除授權"><i class="fa-solid fa-trash"></i></button>
               ` : ''}
             </div>
           </div>
@@ -2128,7 +2144,7 @@ async function loadUsers() {
       `;
     }).join('');
   } catch (err) {
-    listEl.innerHTML = `<p style="color: var(--danger); text-align: center; padding: 40px;">載入錯誤：${err}</p>`;
+    listEl.innerHTML = `<p style="color: var(--danger); text-align: center; padding: 40px;">載入錯誤：${escapeHtml(err)}</p>`;
   }
 }
 

@@ -7,9 +7,11 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.StaticFiles;
 using Cozy.Data;
 using Cozy.Models;
+using Cozy.Helpers;
 
 namespace Cozy.Controllers
 {
@@ -18,33 +20,43 @@ namespace Cozy.Controllers
     public class ProjectsController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<ProjectsController> _logger;
         private readonly IWebHostEnvironment _env;
 
-        public ProjectsController(AppDbContext context, IWebHostEnvironment env)
+        public ProjectsController(AppDbContext context, IWebHostEnvironment env, ILogger<ProjectsController> logger)
         {
+            _logger = logger;
             _context = context;
             _env = env;
         }
 
-        private string GetUploadDirectory()
+        private const long MaxFileSizeBytes = 50L * 1024 * 1024;      // 單一檔案上限 50MB
+        private const long MaxRequestSizeBytes = 200L * 1024 * 1024;  // 單次上傳總量上限 200MB
+
+        // 禁止上傳可能在瀏覽器或伺服器上執行的檔案類型
+        private static readonly HashSet<string> BlockedExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
-            // Support persistent volume on /app/data/uploads/projects if available, else wwwroot/uploads/projects
-            string targetDir;
-            if (Directory.Exists("/app/data"))
+            ".html", ".htm", ".xhtml", ".shtml", ".svg", ".js", ".mjs", ".css", ".xml",
+            ".exe", ".dll", ".bat", ".cmd", ".com", ".msi", ".ps1", ".sh", ".vbs", ".jar",
+            ".php", ".asp", ".aspx", ".cshtml", ".config"
+        };
+
+        private IActionResult ServeFile(ProjectFile file)
+        {
+            string? physicalPath = ProjectFileStorage.ResolveExistingFilePath(_env, file.StoredFileName);
+            if (physicalPath == null)
             {
-                targetDir = Path.Combine("/app/data", "uploads", "projects");
-            }
-            else
-            {
-                string webRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
-                targetDir = Path.Combine(webRoot, "uploads", "projects");
+                return NotFound(new { message = "伺服器上找不到實體檔案" });
             }
 
-            if (!Directory.Exists(targetDir))
+            var provider = new FileExtensionContentTypeProvider();
+            if (!provider.TryGetContentType(file.FileName, out string? contentType))
             {
-                Directory.CreateDirectory(targetDir);
+                contentType = "application/octet-stream";
             }
-            return targetDir;
+
+            var stream = new FileStream(physicalPath, FileMode.Open, FileAccess.Read);
+            return File(stream, contentType, file.FileName, enableRangeProcessing: true);
         }
 
         // GET: api/Projects
@@ -177,10 +189,17 @@ namespace Cozy.Controllers
                 // Auto generate project number if empty
                 if (string.IsNullOrWhiteSpace(project.ProjectNumber))
                 {
-                    string datePrefix = DateTime.Now.ToString("yyyyMMdd");
-                    int countToday = await _context.Projects
-                        .CountAsync(p => p.ProjectNumber.StartsWith("PRJ-" + datePrefix));
-                    project.ProjectNumber = $"PRJ-{datePrefix}-{(countToday + 1):D2}";
+                    // 以今日已存在的最大流水號 + 1 產生編號（刪除專案後不會重複）
+                    string prefix = $"PRJ-{TaiwanTime.Now:yyyyMMdd}-";
+                    var todayNumbers = await _context.Projects
+                        .Where(p => p.ProjectNumber.StartsWith(prefix))
+                        .Select(p => p.ProjectNumber)
+                        .ToListAsync();
+                    int maxSeq = todayNumbers
+                        .Select(n => int.TryParse(n.Substring(prefix.Length), out int seq) ? seq : 0)
+                        .DefaultIfEmpty(0)
+                        .Max();
+                    project.ProjectNumber = $"{prefix}{(maxSeq + 1):D2}";
                 }
 
                 if (string.IsNullOrWhiteSpace(project.Status))
@@ -196,7 +215,8 @@ namespace Cozy.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "建立專案失敗: " + ex.Message });
+                _logger.LogError(ex, "建立專案失敗");
+                return StatusCode(500, new { message = "建立專案失敗，請稍後再試。" });
             }
         }
 
@@ -244,7 +264,8 @@ namespace Cozy.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "更新專案失敗: " + ex.Message });
+                _logger.LogError(ex, "更新專案失敗");
+                return StatusCode(500, new { message = "更新專案失敗，請稍後再試。" });
             }
         }
 
@@ -262,18 +283,9 @@ namespace Cozy.Controllers
             }
 
             // Clean up files on disk
-            string uploadDir = GetUploadDirectory();
             foreach (var file in project.Files)
             {
-                try
-                {
-                    string filePath = Path.Combine(uploadDir, file.StoredFileName);
-                    if (System.IO.File.Exists(filePath))
-                    {
-                        System.IO.File.Delete(filePath);
-                    }
-                }
-                catch { }
+                ProjectFileStorage.DeletePhysicalFile(_env, file.StoredFileName);
             }
 
             _context.Projects.Remove(project);
@@ -284,6 +296,8 @@ namespace Cozy.Controllers
 
         // POST: api/Projects/5/files (Upload multiple files)
         [HttpPost("{id}/files")]
+        [RequestSizeLimit(MaxRequestSizeBytes)]
+        [RequestFormLimits(MultipartBodyLengthLimit = MaxRequestSizeBytes)]
         public async Task<IActionResult> UploadFiles(int id, [FromForm] IFormFileCollection files, [FromForm] string? description)
         {
             var project = await _context.Projects.FindAsync(id);
@@ -297,7 +311,19 @@ namespace Cozy.Controllers
                 return BadRequest(new { message = "請選擇要上傳的檔案" });
             }
 
-            string uploadDir = GetUploadDirectory();
+            foreach (var file in files)
+            {
+                if (file.Length > MaxFileSizeBytes)
+                {
+                    return BadRequest(new { message = $"檔案「{Path.GetFileName(file.FileName)}」超過 50MB 上限" });
+                }
+                if (BlockedExtensions.Contains(Path.GetExtension(file.FileName)))
+                {
+                    return BadRequest(new { message = $"基於安全考量，不允許上傳「{Path.GetExtension(file.FileName)}」類型的檔案" });
+                }
+            }
+
+            string uploadDir = ProjectFileStorage.GetUploadDirectory(_env);
             var addedFiles = new List<ProjectFile>();
 
             foreach (var file in files)
@@ -349,16 +375,7 @@ namespace Cozy.Controllers
                 return NotFound(new { message = "找不到此檔案" });
             }
 
-            string uploadDir = GetUploadDirectory();
-            try
-            {
-                string physicalPath = Path.Combine(uploadDir, file.StoredFileName);
-                if (System.IO.File.Exists(physicalPath))
-                {
-                    System.IO.File.Delete(physicalPath);
-                }
-            }
-            catch { }
+            ProjectFileStorage.DeletePhysicalFile(_env, file.StoredFileName);
 
             _context.ProjectFiles.Remove(file);
             await _context.SaveChangesAsync();
@@ -376,46 +393,21 @@ namespace Cozy.Controllers
                 return NotFound(new { message = "找不到此檔案" });
             }
 
-            string uploadDir = GetUploadDirectory();
-            string physicalPath = Path.Combine(uploadDir, file.StoredFileName);
-
-            if (!System.IO.File.Exists(physicalPath))
-            {
-                return NotFound(new { message = "伺服器上找不到實體檔案" });
-            }
-
-            var provider = new FileExtensionContentTypeProvider();
-            if (!provider.TryGetContentType(file.FileName, out string? contentType))
-            {
-                contentType = "application/octet-stream";
-            }
-
-            var stream = new FileStream(physicalPath, FileMode.Open, FileAccess.Read);
-            return File(stream, contentType, file.FileName, enableRangeProcessing: true);
+            return ServeFile(file);
         }
 
         // GET: api/Projects/files/download-by-name/{storedName}
         [HttpGet("files/download-by-name/{storedName}")]
         public async Task<IActionResult> DownloadFileByName(string storedName)
         {
+            // Only serve files that are registered in the database (prevents arbitrary path access)
             var file = await _context.ProjectFiles.FirstOrDefaultAsync(f => f.StoredFileName == storedName);
-            string uploadDir = GetUploadDirectory();
-            string physicalPath = Path.Combine(uploadDir, storedName);
-
-            if (!System.IO.File.Exists(physicalPath))
+            if (file == null)
             {
-                return NotFound(new { message = "伺服器上找不到實體檔案" });
+                return NotFound(new { message = "找不到此檔案" });
             }
 
-            string downloadName = file != null ? file.FileName : storedName;
-            var provider = new FileExtensionContentTypeProvider();
-            if (!provider.TryGetContentType(downloadName, out string? contentType))
-            {
-                contentType = "application/octet-stream";
-            }
-
-            var stream = new FileStream(physicalPath, FileMode.Open, FileAccess.Read);
-            return File(stream, contentType, downloadName, enableRangeProcessing: true);
+            return ServeFile(file);
         }
     }
 }

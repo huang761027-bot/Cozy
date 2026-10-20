@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Cozy.Data;
+using Cozy.Helpers;
 
 namespace Cozy.Controllers
 {
@@ -21,7 +22,7 @@ namespace Cozy.Controllers
         [HttpGet("stats")]
         public async Task<ActionResult<object>> GetDashboardStats()
         {
-            var now = DateTime.UtcNow;
+            var now = TaiwanTime.Now; // 以台灣時間計算本月起始日
             var today = now.Date;
             var firstDayOfMonth = new DateTime(now.Year, now.Month, 1);
 

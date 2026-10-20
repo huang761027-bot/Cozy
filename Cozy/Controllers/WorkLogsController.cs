@@ -1,11 +1,13 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Cozy.Data;
 using Cozy.Models;
+using Cozy.Helpers;
 
 namespace Cozy.Controllers
 {
@@ -14,9 +16,11 @@ namespace Cozy.Controllers
     public class WorkLogsController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<WorkLogsController> _logger;
 
-        public WorkLogsController(AppDbContext context)
+        public WorkLogsController(AppDbContext context, ILogger<WorkLogsController> logger)
         {
+            _logger = logger;
             _context = context;
         }
 
@@ -173,7 +177,7 @@ namespace Cozy.Controllers
 
                 if (workLog.ScheduledAt == default)
                 {
-                    workLog.ScheduledAt = DateTime.UtcNow;
+                    workLog.ScheduledAt = TaiwanTime.Now;
                 }
 
                 // 預設狀態為待處理
@@ -191,7 +195,8 @@ namespace Cozy.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "儲存工作記錄失敗: " + ex.Message });
+                _logger.LogError(ex, "儲存工作記錄失敗");
+                return StatusCode(500, new { message = "儲存工作記錄失敗，請稍後再試。" });
             }
         }
 
@@ -218,7 +223,8 @@ namespace Cozy.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "更新狀態失敗: " + ex.Message });
+                _logger.LogError(ex, "更新狀態失敗");
+                return StatusCode(500, new { message = "更新狀態失敗，請稍後再試。" });
             }
         }
 
@@ -265,7 +271,8 @@ namespace Cozy.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "更新工作記錄失敗: " + ex.Message });
+                _logger.LogError(ex, "更新工作記錄失敗");
+                return StatusCode(500, new { message = "更新工作記錄失敗，請稍後再試。" });
             }
         }
 
@@ -295,26 +302,37 @@ namespace Cozy.Controllers
                 var end = start.AddHours(2);
                 string custName = w.Customer != null ? w.Customer.Name : "未指定客戶";
                 string title = $"【永倉】{w.Title} - {custName}";
-                string loc = (w.Location ?? (w.Customer != null ? w.Customer.Address : "") ?? "").Replace(",", "\\,").Replace(";", "\\;");
-                string desc = $"狀態: {w.Status}\\n客戶電話: {(w.Customer?.Phone ?? "無")}\\n工作說明: {w.Details ?? "無"}".Replace("\r", "").Replace("\n", "\\n");
+                string loc = w.Location ?? (w.Customer != null ? w.Customer.Address : "") ?? "";
+                string desc = $"狀態: {w.Status}\n客戶電話: {(w.Customer?.Phone ?? "無")}\n工作說明: {w.Details ?? "無"}";
 
                 sb.AppendLine("BEGIN:VEVENT");
                 sb.AppendLine($"UID:worklog-{w.Id}@cozy-system");
                 sb.AppendLine($"DTSTAMP:{DateTime.UtcNow:yyyyMMdd\\THHmmss\\Z}");
-                sb.AppendLine($"DTSTART:{start.ToUniversalTime():yyyyMMdd\\THHmmss\\Z}");
-                sb.AppendLine($"DTEND:{end.ToUniversalTime():yyyyMMdd\\THHmmss\\Z}");
-                sb.AppendLine($"SUMMARY:{title}");
-                sb.AppendLine($"LOCATION:{loc}");
-                sb.AppendLine($"DESCRIPTION:{desc}");
+                // ScheduledAt is stored as Taiwan local time; convert explicitly to UTC
+                sb.AppendLine($"DTSTART:{TaiwanTime.ToUtc(start):yyyyMMdd\\THHmmss\\Z}");
+                sb.AppendLine($"DTEND:{TaiwanTime.ToUtc(end):yyyyMMdd\\THHmmss\\Z}");
+                sb.AppendLine($"SUMMARY:{IcsEscape(title)}");
+                sb.AppendLine($"LOCATION:{IcsEscape(loc)}");
+                sb.AppendLine($"DESCRIPTION:{IcsEscape(desc)}");
                 sb.AppendLine("STATUS:CONFIRMED");
                 sb.AppendLine("END:VEVENT");
             }
 
             sb.AppendLine("END:VCALENDAR");
 
-            byte[] icsBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+            // iCalendar (RFC 5545) requires CRLF line endings
+            byte[] icsBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString().Replace("\r\n", "\n").Replace("\n", "\r\n"));
             return File(icsBytes, "text/calendar", "cozy_work_schedule.ics");
         }
+
+        // Escape text values per RFC 5545 (backslash, semicolon, comma, newline)
+        private static string IcsEscape(string value) =>
+            value.Replace("\\", "\\\\")
+                 .Replace(";", "\\;")
+                 .Replace(",", "\\,")
+                 .Replace("\r\n", "\\n")
+                 .Replace("\r", "\\n")
+                 .Replace("\n", "\\n");
 
         // DELETE: api/WorkLogs/5
         [HttpDelete("{id}")]

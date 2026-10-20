@@ -176,15 +176,16 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// 7. Static files for PWA Web Application
+// 7. Global Security Authentication Middleware (全面鎖定所有 API 後端存取)
+// Runs before static files so that blocked paths (e.g. legacy /uploads) are never served.
+app.UseMiddleware<CozyAuthMiddleware>();
+
+// 8. Static files for PWA Web Application
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.UseRouting();
 app.UseAuthorization();
-
-// 8. Global Security Authentication Middleware (全面鎖定所有 API 後端存取)
-app.UseMiddleware<CozyAuthMiddleware>();
 
 app.MapControllers();
 

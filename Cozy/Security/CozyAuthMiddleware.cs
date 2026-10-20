@@ -24,6 +24,13 @@ namespace Cozy.Security
         {
             var path = context.Request.Path.Value ?? "";
 
+            // 0. Legacy uploads inside wwwroot must never be served publicly (use the authenticated download API)
+            if (path.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
             // 1. Allow Static files, Root index, and PWA assets
             if (!path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
             {

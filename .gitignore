@@ -20,3 +20,6 @@
 *.nupkg
 project.lock.json
 project.assets.json
+
+## Local uploads (stored outside wwwroot)
+Cozy/App_Data/
