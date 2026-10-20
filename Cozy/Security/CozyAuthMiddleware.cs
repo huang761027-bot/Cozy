@@ -1,10 +1,11 @@
 using System;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Cozy.Data;
 using Cozy.Models;
 
@@ -19,7 +20,7 @@ namespace Cozy.Security
             _next = next;
         }
 
-        public async Task InvokeAsync(HttpContext context, IServiceProvider serviceProvider)
+        public async Task InvokeAsync(HttpContext context, AppDbContext dbContext)
         {
             var path = context.Request.Path.Value ?? "";
 
@@ -30,103 +31,64 @@ namespace Cozy.Security
                 return;
             }
 
-            // 2. Allow Auth endpoints (login, config, me, logout) and public ical subscription
-            if (path.StartsWith("/api/auth/", StringComparison.OrdinalIgnoreCase) ||
-                path.Equals("/api/worklogs/calendar.ics", StringComparison.OrdinalIgnoreCase))
+            // 2. Allow Auth endpoints (login, config, me, logout)
+            if (path.StartsWith("/api/auth/", StringComparison.OrdinalIgnoreCase))
             {
                 await _next(context);
                 return;
             }
 
-            // 3. Extract authenticated email from Cookie or custom Header
-            string? email = context.Request.Cookies["Cozy_User_Email"]
-                ?? context.Request.Headers["X-User-Email"].FirstOrDefault()
-                ?? context.Request.Headers["Authorization"].FirstOrDefault()?.Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
-
-            if (string.IsNullOrWhiteSpace(email))
+            // 3. iCal subscription for external calendar apps: allowed only with the secret ICAL_TOKEN
+            if (path.Equals("/api/worklogs/calendar.ics", StringComparison.OrdinalIgnoreCase) && HasValidIcalToken(context))
             {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                context.Response.ContentType = "application/json; charset=utf-8";
-                var err = new { message = "🚫 未經授權存取：請先使用授權的 Google 帳號登入系統！" };
-                await context.Response.WriteAsync(JsonSerializer.Serialize(err));
+                await _next(context);
                 return;
             }
 
-            email = email.Trim().ToLowerInvariant();
-            string rootAdminEmail = (Environment.GetEnvironmentVariable("SUPER_ADMIN_EMAIL") 
-                ?? "huang761027@gmail.com").Trim().ToLowerInvariant();
+            // 4. Resolve authenticated email from the signed session cookie only
+            string? email = CozySession.GetEmail(context);
 
-            using (var scope = serviceProvider.CreateScope())
+            if (string.IsNullOrWhiteSpace(email))
             {
-                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                
-                SystemUser? user = null;
-                try
-                {
-                    user = await dbContext.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
-                }
-                catch
-                {
-                    try
-                    {
-                        await dbContext.Database.ExecuteSqlRawAsync(@"
-                            CREATE TABLE IF NOT EXISTS `SystemUsers` (
-                                `Id` int NOT NULL AUTO_INCREMENT,
-                                `Email` varchar(191) NOT NULL,
-                                `Name` longtext NULL,
-                                `PictureUrl` longtext NULL,
-                                `Role` varchar(50) NOT NULL DEFAULT 'Staff',
-                                `IsActive` tinyint(1) NOT NULL DEFAULT 1,
-                                `LastLoginAt` datetime(6) NULL,
-                                `CreatedAt` datetime(6) NOT NULL,
-                                PRIMARY KEY (`Id`),
-                                UNIQUE KEY `IX_SystemUsers_Email` (`Email`)
-                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-                        ");
-                        user = await dbContext.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
-                    }
-                    catch { }
-                }
-
-                // Auto seed root admin if database is new
-                if (user == null && email == rootAdminEmail)
-                {
-                    user = new SystemUser
-                    {
-                        Email = email,
-                        Name = "超級管理者",
-                        Role = "Admin",
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    dbContext.SystemUsers.Add(user);
-                    await dbContext.SaveChangesAsync();
-                }
-
-                if (user == null || !user.IsActive)
-                {
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    context.Response.ContentType = "application/json; charset=utf-8";
-                    var err = new { message = "🚫 存取被拒：此 Google 帳號未在授權白名單內或已被停用！" };
-                    await context.Response.WriteAsync(JsonSerializer.Serialize(err));
-                    return;
-                }
-
-                // Protect User Management endpoint - Admin only
-                if (path.StartsWith("/api/users", StringComparison.OrdinalIgnoreCase) && user.Role != "Admin" && email != rootAdminEmail)
-                {
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    context.Response.ContentType = "application/json; charset=utf-8";
-                    var err = new { message = "🚫 權限不足：只有超級管理者可管理使用者清單！" };
-                    await context.Response.WriteAsync(JsonSerializer.Serialize(err));
-                    return;
-                }
-
-                // Attach current authenticated user to context
-                context.Items["CurrentUser"] = user;
+                await WriteError(context, StatusCodes.Status401Unauthorized, "🚫 未經授權存取：請先使用授權的 Google 帳號登入系統！");
+                return;
             }
 
+            SystemUser? user = await dbContext.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+
+            if (user == null || !user.IsActive)
+            {
+                await WriteError(context, StatusCodes.Status403Forbidden, "🚫 存取被拒：此 Google 帳號未在授權白名單內或已被停用！");
+                return;
+            }
+
+            // Protect User Management endpoint - Admin only
+            if (path.StartsWith("/api/users", StringComparison.OrdinalIgnoreCase) && user.Role != "Admin" && email != CozySession.RootAdminEmail)
+            {
+                await WriteError(context, StatusCodes.Status403Forbidden, "🚫 權限不足：只有超級管理者可管理使用者清單！");
+                return;
+            }
+
+            // Attach current authenticated user to context
+            context.Items["CurrentUser"] = user;
+
             await _next(context);
+        }
+
+        private static bool HasValidIcalToken(HttpContext context)
+        {
+            string? expected = Environment.GetEnvironmentVariable("ICAL_TOKEN");
+            string? provided = context.Request.Query["token"].FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrWhiteSpace(provided)) return false;
+
+            return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(expected), Encoding.UTF8.GetBytes(provided));
+        }
+
+        private static async Task WriteError(HttpContext context, int statusCode, string message)
+        {
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { message }));
         }
     }
 }

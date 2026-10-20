@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Cozy.Data;
 using Cozy.Models;
+using Cozy.Security;
 
 namespace Cozy.Controllers
 {
@@ -23,12 +24,9 @@ namespace Cozy.Controllers
         // Helper to check admin permission
         private async Task<bool> IsAdminAsync()
         {
-            string? email = Request.Cookies["Cozy_User_Email"] ?? Request.Headers["X-User-Email"].FirstOrDefault();
+            string? email = CozySession.GetEmail(HttpContext);
             if (string.IsNullOrWhiteSpace(email)) return false;
-
-            email = email.Trim().ToLowerInvariant();
-            string rootAdmin = (Environment.GetEnvironmentVariable("SUPER_ADMIN_EMAIL") ?? "huang761027@gmail.com").ToLowerInvariant();
-            if (email == rootAdmin) return true;
+            if (email == CozySession.RootAdminEmail) return true;
 
             var user = await _context.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
             return user != null && user.IsActive && user.Role == "Admin";

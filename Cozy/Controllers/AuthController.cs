@@ -1,15 +1,14 @@
 using System;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Json;
-using System.Text.Json;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
+using Google.Apis.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Cozy.Data;
 using Cozy.Models;
+using Cozy.Security;
 
 namespace Cozy.Controllers
 {
@@ -19,144 +18,76 @@ namespace Cozy.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IConfiguration _config;
-        private static readonly HttpClient _httpClient = new HttpClient();
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(AppDbContext context, IConfiguration config)
+        public AuthController(AppDbContext context, IConfiguration config, ILogger<AuthController> logger)
         {
             _context = context;
             _config = config;
+            _logger = logger;
         }
 
         public class GoogleAuthRequest
         {
             public string? Credential { get; set; } // Google ID Token
-            public string? Email { get; set; }      // Optional direct email in development
-            public string? Name { get; set; }
-            public string? Picture { get; set; }
         }
 
-        public class GoogleTokenInfo
-        {
-            public string? email { get; set; }
-            public string? name { get; set; }
-            public string? picture { get; set; }
-            public string? email_verified { get; set; }
-            public string? error_description { get; set; }
-        }
+        private string GetClientId() =>
+            Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID")
+            ?? _config["Authentication:Google:ClientId"]
+            ?? "";
 
         // GET: api/auth/config
         [HttpGet("config")]
         public IActionResult GetConfig()
         {
-            string clientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") 
-                ?? _config["Authentication:Google:ClientId"] 
-                ?? "";
-            
-            return Ok(new { clientId });
+            return Ok(new { clientId = GetClientId() });
         }
 
         // POST: api/auth/google
         [HttpPost("google")]
         public async Task<IActionResult> GoogleLogin([FromBody] GoogleAuthRequest req)
         {
+            if (string.IsNullOrWhiteSpace(req.Credential))
+            {
+                return BadRequest(new { message = "🚫 安全防護：必須透過 Google 官方登入彈窗進行密碼與身分驗證，禁止手動輸入信箱！" });
+            }
+
+            string clientId = GetClientId();
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                return StatusCode(500, new { message = "伺服器尚未設定 GOOGLE_CLIENT_ID，無法驗證 Google 登入。" });
+            }
+
+            // Verify ID Token signature, issuer, expiry and audience (must be issued for this app)
+            GoogleJsonWebSignature.Payload payload;
             try
             {
-                if (string.IsNullOrWhiteSpace(req.Credential))
+                payload = await GoogleJsonWebSignature.ValidateAsync(req.Credential, new GoogleJsonWebSignature.ValidationSettings
                 {
-                    return BadRequest(new { message = "🚫 安全防護：必須透過 Google 官方登入彈窗進行密碼與身分驗證，禁止手動輸入信箱！" });
-                }
+                    Audience = new[] { clientId }
+                });
+            }
+            catch (Exception)
+            {
+                return BadRequest(new { message = "無法驗證 Google 官方憑證（Token 無效或過期），請重新嘗試登入。" });
+            }
 
-                string email = "";
-                string name = "";
-                string picture = "";
+            if (string.IsNullOrWhiteSpace(payload.Email) || !payload.EmailVerified)
+            {
+                return BadRequest(new { message = "此 Google 帳號的 Email 尚未驗證，無法登入。" });
+            }
 
-                // Verify ID Token with Google official tokeninfo API
-                try
-                {
-                    var response = await _httpClient.GetAsync($"https://oauth2.googleapis.com/tokeninfo?id_token={req.Credential}");
-                    if (response.IsSuccessStatusCode)
-                    {
-                        var tokenInfo = await response.Content.ReadFromJsonAsync<GoogleTokenInfo>();
-                        if (tokenInfo != null && !string.IsNullOrWhiteSpace(tokenInfo.email))
-                        {
-                            email = tokenInfo.email.Trim().ToLowerInvariant();
-                            name = tokenInfo.name ?? req.Name ?? email.Split('@')[0];
-                            picture = tokenInfo.picture ?? req.Picture ?? "";
-                        }
-                    }
-                }
-                catch { }
+            string email = payload.Email.Trim().ToLowerInvariant();
+            string name = payload.Name ?? email.Split('@')[0];
+            string picture = payload.Picture ?? "";
 
-                // Fallback to decode JWT payload if direct network lookup has minor delay
-                if (string.IsNullOrWhiteSpace(email))
-                {
-                    var parts = req.Credential.Split('.');
-                    if (parts.Length >= 2)
-                    {
-                        string payloadBase64 = parts[1].PadRight(parts[1].Length + (4 - parts[1].Length % 4) % 4, '=')
-                            .Replace('-', '+').Replace('_', '/');
-                        byte[] bytes = Convert.FromBase64String(payloadBase64);
-                        var jsonDoc = JsonDocument.Parse(bytes);
-                        if (jsonDoc.RootElement.TryGetProperty("email", out var emailProp))
-                        {
-                            email = emailProp.GetString()?.Trim().ToLowerInvariant() ?? "";
-                        }
-                        if (jsonDoc.RootElement.TryGetProperty("name", out var nameProp))
-                        {
-                            name = nameProp.GetString() ?? "";
-                        }
-                        if (jsonDoc.RootElement.TryGetProperty("picture", out var picProp))
-                        {
-                            picture = picProp.GetString() ?? "";
-                        }
-                    }
-                }
-
-                if (string.IsNullOrWhiteSpace(email))
-                {
-                    return BadRequest(new { message = "無法驗證 Google 官方憑證（Token 無效或過期），請重新嘗試登入。" });
-                }
-
-                string rootAdminEmail = (Environment.GetEnvironmentVariable("SUPER_ADMIN_EMAIL") 
-                    ?? "huang761027@gmail.com").Trim().ToLowerInvariant();
-
-                // Check if user exists in whitelist (with auto-create table fallback)
-                SystemUser? user = null;
-                try
-                {
-                    user = await _context.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
-                }
-                catch (Exception dbEx)
-                {
-                    try
-                    {
-                        await _context.Database.ExecuteSqlRawAsync(@"
-                            CREATE TABLE IF NOT EXISTS `SystemUsers` (
-                                `Id` int NOT NULL AUTO_INCREMENT,
-                                `Email` varchar(191) NOT NULL,
-                                `Name` longtext NULL,
-                                `PictureUrl` longtext NULL,
-                                `Role` varchar(50) NOT NULL DEFAULT 'Staff',
-                                `IsActive` tinyint(1) NOT NULL DEFAULT 1,
-                                `LastLoginAt` datetime(6) NULL,
-                                `CreatedAt` datetime(6) NOT NULL,
-                                PRIMARY KEY (`Id`),
-                                UNIQUE KEY `IX_SystemUsers_Email` (`Email`)
-                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-                        ");
-                        user = await _context.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
-                    }
-                    catch
-                    {
-                        throw dbEx;
-                    }
-                }
+            try
+            {
+                var user = await _context.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
 
                 // Auto-seed root admin if it doesn't exist
-                bool anyUsers = true;
-                try { anyUsers = await _context.SystemUsers.AnyAsync(); } catch { anyUsers = false; }
-
-                if (user == null && (email == rootAdminEmail || !anyUsers))
+                if (user == null && email == CozySession.RootAdminEmail)
                 {
                     user = new SystemUser
                     {
@@ -197,14 +128,8 @@ namespace Cozy.Controllers
                 user.LastLoginAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
 
-                // Issue secure session cookie
-                Response.Cookies.Append("Cozy_User_Email", user.Email, new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = true,
-                    SameSite = SameSiteMode.Lax,
-                    Expires = DateTimeOffset.UtcNow.AddDays(30)
-                });
+                // Issue signed session cookie
+                CozySession.SignIn(HttpContext, user.Email);
 
                 return Ok(new
                 {
@@ -223,26 +148,21 @@ namespace Cozy.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "登入驗證時發生錯誤: " + ex.Message });
+                _logger.LogError(ex, "Google login failed for {Email}", email);
+                return StatusCode(500, new { message = "登入驗證時發生錯誤，請稍後再試。" });
             }
         }
 
         // GET: api/auth/me
         [HttpGet("me")]
-        public async Task<IActionResult> GetCurrentUser([FromHeader(Name = "X-User-Email")] string? headerEmail)
+        public async Task<IActionResult> GetCurrentUser()
         {
-            string? email = Request.Cookies["Cozy_User_Email"] ?? headerEmail;
-            
-            // If empty, check if we have root admin fallback
-            string rootAdminEmail = (Environment.GetEnvironmentVariable("SUPER_ADMIN_EMAIL") 
-                ?? "huang761027@gmail.com").Trim().ToLowerInvariant();
-
+            string? email = CozySession.GetEmail(HttpContext);
             if (string.IsNullOrWhiteSpace(email))
             {
                 return Unauthorized(new { message = "尚未登入" });
             }
 
-            email = email.Trim().ToLowerInvariant();
             var user = await _context.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
 
             if (user == null || !user.IsActive)
@@ -266,7 +186,7 @@ namespace Cozy.Controllers
         [HttpPost("logout")]
         public IActionResult Logout()
         {
-            Response.Cookies.Delete("Cozy_User_Email");
+            CozySession.SignOut(HttpContext);
             return Ok(new { message = "已安全登出" });
         }
     }

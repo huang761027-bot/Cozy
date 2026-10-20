@@ -44,6 +44,13 @@ Cozy 是一套專為個人工作室、接案者與中小型業務設計的輕量
 - 本系統內建 **Railway MySQL 環境變數自動解析**：
   - 只要 Cozy 與 MySQL 放在同一個 Railway Project，或在 Cozy 服務的 **Variables** 中將 MySQL 的變數加入（Railway 通常會自動注入 `MYSQL_URL` 或 `MYSQLHOST` / `MYSQLPASSWORD` 等），系統在啟動時就會自動連線並自動建立所需資料表（不需要手動執行 SQL 建立指令）。
 
+### 步驟 3.5：設定登入安全相關環境變數
+在 Cozy 服務的 **Variables** 中設定：
+- `GOOGLE_CLIENT_ID`（**必填**）：Google OAuth 用戶端 ID，後端會用它驗證 Google 登入憑證的簽章與對象，未設定時無法登入。
+- `SUPER_ADMIN_EMAIL`（建議）：超級管理者的 Google 帳號，首次登入時自動建立為 Admin。
+- `ICAL_TOKEN`（選填）：一組隨機長字串。設定後可用 `https://<網址>/api/worklogs/calendar.ics?token=<ICAL_TOKEN>` 讓外部行事曆訂閱；未設定時只有已登入的使用者能下載行事曆檔。
+- 建議為 Cozy 掛載 Railway Volume 到 `/app/data`，登入 Session 的加密金鑰會保存在此，重新部署後使用者不必重新登入。
+
 ### 步驟 4：產生公開網址
 - 在 Cozy 服務的 **Settings** -> **Networking** -> 點擊 **Generate Domain**，即可獲得可公開存取的網址（例如 `https://cozy-production-xxxx.up.railway.app`）。
 

@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -55,16 +56,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     }
 });
 
-// 3. CORS configuration
-builder.Services.AddCors(options =>
+// 3. Data Protection keys (sign session cookies). Persist to the Railway volume so logins survive redeploys.
+var dataProtection = builder.Services.AddDataProtection().SetApplicationName("Cozy");
+if (System.IO.Directory.Exists("/app/data"))
 {
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+    dataProtection.PersistKeysToFileSystem(new System.IO.DirectoryInfo("/app/data/dp-keys"));
+}
 
 // 4. Swagger / OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -169,14 +166,15 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// 6. HTTP request pipeline configuration
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// 6. HTTP request pipeline configuration (Swagger only in Development)
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "永倉管理 API v1");
-});
-
-app.UseCors("AllowAll");
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "永倉管理 API v1");
+    });
+}
 
 // 7. Static files for PWA Web Application
 app.UseDefaultFiles();
