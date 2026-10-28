@@ -68,7 +68,6 @@ namespace Cozy.Controllers
         {
             var query = _context.Projects
                 .Include(p => p.Customer)
-                .Include(p => p.Files)
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -113,17 +112,8 @@ namespace Cozy.Controllers
                     p.EndDate,
                     p.Notes,
                     p.CreatedAt,
-                    FileCount = p.Files.Count,
-                    Files = p.Files.Select(f => new
-                    {
-                        f.Id,
-                        f.FileName,
-                        f.FileType,
-                        f.FileSizeBytes,
-                        f.Description,
-                        f.UploadedAt,
-                        f.FilePath
-                    }).ToList()
+                    // 列表只需要檔案數量；檔案明細在 GET api/Projects/{id} 取得
+                    FileCount = p.Files.Count
                 })
                 .ToListAsync();
 

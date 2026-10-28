@@ -64,6 +64,14 @@ if (System.IO.Directory.Exists("/app/data"))
     dataProtection.PersistKeysToFileSystem(new System.IO.DirectoryInfo("/app/data/dp-keys"));
 }
 
+// Compress static assets (app.js / app.css / index.html) for faster loading on mobile networks.
+// API JSON is intentionally left uncompressed to avoid compression side-channel risks over HTTPS.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.MimeTypes = new[] { "text/html", "text/css", "application/javascript", "text/javascript", "image/svg+xml", "application/manifest+json" };
+});
+
 // 4. Swagger / OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -193,6 +201,7 @@ if (app.Environment.IsDevelopment())
 
 // 7. Global Security Authentication Middleware (全面鎖定所有 API 後端存取)
 // Runs before static files so that blocked paths (e.g. legacy /uploads) are never served.
+app.UseResponseCompression();
 app.UseMiddleware<CozyAuthMiddleware>();
 
 // 8. Static files for PWA Web Application

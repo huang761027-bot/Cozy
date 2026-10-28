@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="永倉管理">
-  <link rel="stylesheet" href="/css/app.css?v=20260915_auth_v3">
+  <link rel="stylesheet" href="/css/app.css?v=20261028_stats">
   <!-- FontAwesome 6 Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Barcode & QR Code Scanner Libraries for Taiwan Electronic Invoices -->
@@ -185,13 +185,17 @@
         <i class="fa-solid fa-wallet"></i>
         <span>收費紀錄</span>
       </a>
+      <a class="nav-item" data-tab="stats">
+        <i class="fa-solid fa-chart-column"></i>
+        <span>統計報表</span>
+      </a>
       <a class="nav-item" id="nav-item-users" data-tab="users" style="display: none;">
         <i class="fa-solid fa-user-shield"></i>
         <span>帳號管理</span>
       </a>
     </nav>
     <div style="margin-top: auto; font-size: 12px; color: #64748b; text-align: center;">
-      永倉管理系統 v2.6
+      永倉管理系統 v2.7
     </div>
   </aside>
 
@@ -421,6 +425,74 @@
       </div>
     </section>
 
+    <!-- SECTION: 統計報表 (Statistics) -->
+    <section id="view-stats" class="content-view" style="display: none;">
+      <div class="filter-bar">
+        <select id="stats-period" class="select-input" onchange="loadStats()" aria-label="統計期間">
+          <option value="months:6">近 6 個月</option>
+          <option value="months:12" selected>近 12 個月</option>
+          <option value="year:current">今年</option>
+          <option value="year:previous">去年</option>
+        </select>
+        <span id="stats-range-label" class="stats-range-label"></span>
+        <button class="btn btn-secondary" onclick="exportStatsCsv()" style="margin-left: auto;">
+          <i class="fa-solid fa-file-csv"></i> 匯出月報表 (CSV)
+        </button>
+      </div>
+
+      <div class="stats-grid" id="stats-kpis">
+        <!-- KPI tiles rendered by JS -->
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="stats-card-title"><i class="fa-solid fa-sack-dollar"></i> 每月營收</h3>
+          <span class="stats-card-note">僅計入狀態為「已收款」的收費紀錄</span>
+        </div>
+        <div id="stats-revenue-chart" class="viz-chart" role="img" aria-label="每月營收長條圖"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="stats-card-title"><i class="fa-solid fa-screwdriver-wrench"></i> 每月工單數（依類型）</h3>
+          <span class="stats-card-note">依預定日期統計，不含已取消</span>
+        </div>
+        <div id="stats-worklog-legend" class="viz-legend"></div>
+        <div id="stats-worklog-chart" class="viz-chart" role="img" aria-label="每月工單數堆疊長條圖"></div>
+      </div>
+
+      <div class="stats-two-col">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="stats-card-title"><i class="fa-solid fa-credit-card"></i> 收款方式</h3>
+            <span class="stats-card-note">期間內已收款金額</span>
+          </div>
+          <div id="stats-methods" class="viz-hbars"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="stats-card-title"><i class="fa-solid fa-folder-open"></i> 專案狀態</h3>
+            <span class="stats-card-note">目前所有專案案場</span>
+          </div>
+          <div id="stats-projects" class="viz-hbars"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="stats-card-title"><i class="fa-solid fa-ranking-star"></i> 客戶營收排行 (前 10 名)</h3>
+        </div>
+        <div class="stats-table-wrap" id="stats-top-customers"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="stats-card-title"><i class="fa-solid fa-table"></i> 月報表</h3>
+        </div>
+        <div class="stats-table-wrap" id="stats-monthly-table"></div>
+      </div>
+    </section>
+
     <!-- SECTION 6: 授權管理 (Users - 超級管理者專用) -->
     <section id="view-users" class="content-view" style="display: none;">
       <div class="filter-bar">
@@ -469,6 +541,10 @@
     <a class="mobile-nav-item" data-tab="payments">
       <i class="fa-solid fa-wallet icon"></i>
       <span>收費</span>
+    </a>
+    <a class="mobile-nav-item" data-tab="stats">
+      <i class="fa-solid fa-chart-column icon"></i>
+      <span>統計</span>
     </a>
     <a class="mobile-nav-item" id="mobile-nav-item-users" data-tab="users" style="display: none;">
       <i class="fa-solid fa-user-shield icon"></i>
@@ -1063,6 +1139,6 @@
   </div>
 </div>
 
-<script src="/js/app.js?v=20260915_auth_v3"></script>
+<script src="/js/app.js?v=20261028_stats"></script>
 </body>
 </html>
