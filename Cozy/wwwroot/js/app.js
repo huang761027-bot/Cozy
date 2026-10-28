@@ -44,16 +44,17 @@ window.fetch = async (...args) => {
 };
 
 // Utility: Debounce for search inputs
+// 同一個函式共用同一個計時器，HTML 中的 oninput="debounce(loadX, 300)()" 才能真正合併連續輸入
+const debouncedFunctions = new Map();
 function debounce(func, wait) {
+  if (debouncedFunctions.has(func)) return debouncedFunctions.get(func);
   let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
+  const executedFunction = function (...args) {
     clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
+    timeout = setTimeout(() => func(...args), wait);
   };
+  debouncedFunctions.set(func, executedFunction);
+  return executedFunction;
 }
 
 // Utility: Currency format
@@ -163,6 +164,7 @@ function switchTab(tabName) {
     projects: '<i class="fa-solid fa-folder-open"></i> <span>專案案場</span>',
     worklogs: '<i class="fa-solid fa-calendar-check"></i> <span>工作行程</span>',
     payments: '<i class="fa-solid fa-wallet"></i> <span>收費紀錄</span>',
+    stats: '<i class="fa-solid fa-chart-column"></i> <span>統計報表</span>',
     users: '<i class="fa-solid fa-user-shield"></i> <span>帳號授權管理</span>'
   };
 
@@ -171,6 +173,7 @@ function switchTab(tabName) {
   if (targetView) targetView.style.display = 'block';
 
   if (tabName === 'dashboard') loadDashboard();
+  if (tabName === 'stats') loadStats();
   if (tabName === 'customers') loadCustomers();
   if (tabName === 'projects') loadProjects();
   if (tabName === 'worklogs') loadWorkLogs();
@@ -1364,7 +1367,7 @@ async function loadPayments() {
               <span><i class="fa-solid fa-money-bill-transfer" style="color: #64748b;"></i> ${escapeHtml(p.paymentMethod)}</span>
               <span><i class="fa-regular fa-calendar"></i> ${formatDate(p.paymentDate)}</span>
               ${p.invoiceNumber ? `<span><i class="fa-solid fa-receipt"></i> 發票: <b>${escapeHtml(p.invoiceNumber)}</b></span>` : ''}
-              ${p.invoiceImageUrl ? `<span class="invoice-attachment-tag" onclick="viewLargeImage(${jsArg(p.invoiceImageUrl)})"><i class="fa-solid fa-image"></i> 檢視發票相片</span>` : ''}
+              ${p.hasInvoiceImage ? `<span class="invoice-attachment-tag" onclick="viewPaymentInvoiceImage(${p.id})"><i class="fa-solid fa-image"></i> 檢視發票相片</span>` : ''}
             </div>
             ${p.notes ? `<div style="font-size: 13px; color: #64748b; margin-top: 4px;"><i class="fa-regular fa-comment-dots"></i> 備註: ${escapeHtml(p.notes)}</div>` : ''}
           </div>
@@ -1601,6 +1604,21 @@ function clearInvoiceImage() {
   document.getElementById('invoice-preview-card').style.display = 'none';
   const fileInput = document.getElementById('invoice-file-input');
   if (fileInput) fileInput.value = '';
+}
+
+// 列表不含發票相片（體積大），點擊時才向伺服器取得
+async function viewPaymentInvoiceImage(id) {
+  try {
+    const res = await fetch(`/api/payments/${id}`);
+    if (!res.ok) {
+      alert('無法載入發票相片');
+      return;
+    }
+    const p = await res.json();
+    viewLargeImage(p.invoiceImageUrl);
+  } catch (err) {
+    alert('載入發票相片時發生網路錯誤');
+  }
 }
 
 function viewLargeImage(src) {
@@ -2277,3 +2295,389 @@ async function deleteUser(id, email) {
   }
 }
 
+
+// ==================== 📊 統計報表 (STATISTICS) ====================
+let statsData = null;
+
+// 工單類型固定配色（顏色跟著類型走，不隨排序或篩選改變）
+const WORK_TYPE_SERIES = [
+  { key: '保養', color: 'var(--series-1)' },
+  { key: '安裝', color: 'var(--series-2)' },
+  { key: '維修', color: 'var(--series-3)' },
+  { key: '其他', color: 'var(--series-4)' }
+];
+
+function getStatsQuery() {
+  const value = document.getElementById('stats-period')?.value || 'months:12';
+  const [kind, arg] = value.split(':');
+  if (kind === 'year') {
+    const year = new Date().getFullYear() - (arg === 'previous' ? 1 : 0);
+    return `year=${year}`;
+  }
+  return `months=${encodeURIComponent(arg)}`;
+}
+
+function formatMonthLabel(key) {
+  const [y, m] = key.split('-');
+  return `${y} 年 ${Number(m)} 月`;
+}
+
+function formatAxisCurrency(v) {
+  if (v >= 10000) return `${Number((v / 10000).toFixed(1))}萬`;
+  return Number(v).toLocaleString('zh-TW');
+}
+
+async function loadStats() {
+  const kpiEl = document.getElementById('stats-kpis');
+  if (!kpiEl) return;
+  kpiEl.innerHTML = '<p style="color: var(--text-muted); padding: 24px;"><i class="fa-solid fa-spinner fa-spin"></i> 統計資料載入中...</p>';
+
+  try {
+    const res = await fetch(`/api/stats?${getStatsQuery()}`);
+    if (!res.ok) {
+      const errMsg = await parseErrorMessage(res, '無法載入統計資料');
+      kpiEl.innerHTML = `<p style="color: var(--danger); padding: 24px;">${escapeHtml(errMsg)}</p>`;
+      return;
+    }
+    statsData = await res.json();
+    renderStats();
+  } catch (err) {
+    kpiEl.innerHTML = `<p style="color: var(--danger); padding: 24px;">載入統計資料時發生網路錯誤：${escapeHtml(err.message || err)}</p>`;
+  }
+}
+
+function renderStats() {
+  const d = statsData;
+  if (!d) return;
+  const t = d.totals;
+
+  const rangeEl = document.getElementById('stats-range-label');
+  if (rangeEl && d.months.length) {
+    rangeEl.innerText = `${formatMonthLabel(d.months[0])} – ${formatMonthLabel(d.months[d.months.length - 1])}`;
+  }
+
+  // KPI tiles
+  let changeHtml = '<span class="stat-delta">前期無資料</span>';
+  if (t.prevRevenue > 0) {
+    const pct = ((t.revenue - t.prevRevenue) / t.prevRevenue) * 100;
+    const up = pct >= 0;
+    changeHtml = `<span class="stat-delta ${up ? 'is-up' : 'is-down'}"><i class="fa-solid ${up ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'}"></i> ${up ? '+' : ''}${pct.toFixed(1)}% 較前期</span>`;
+  }
+  const tiles = [
+    { label: '期間營收', value: formatCurrency(t.revenue), sub: changeHtml, icon: 'fa-sack-dollar', cls: 'stat-icon-success' },
+    { label: '收款筆數 / 平均客單', value: `${t.paymentCount} 筆`, sub: `<span class="stat-delta">平均 ${formatCurrency(t.averageTicket)}</span>`, icon: 'fa-receipt', cls: 'stat-icon-primary' },
+    { label: '目前待收款', value: formatCurrency(t.pendingAmount), sub: `<span class="stat-delta">${t.pendingCount} 筆未收</span>`, icon: 'fa-hourglass-half', cls: 'stat-icon-warning' },
+    { label: '工單完成 / 總數', value: `${t.completedWorkOrders} / ${t.workOrders}`, sub: `<span class="stat-delta">完成率 ${t.workOrders ? Math.round(t.completedWorkOrders / t.workOrders * 100) : 0}%</span>`, icon: 'fa-clipboard-check', cls: 'stat-icon-info' },
+    { label: '新增客戶', value: `${t.newCustomers} 位`, sub: '<span class="stat-delta">期間內建立</span>', icon: 'fa-user-plus', cls: 'stat-icon-primary' }
+  ];
+  document.getElementById('stats-kpis').innerHTML = tiles.map(tile => `
+    <div class="stat-card">
+      <div class="stat-info">
+        <span class="stat-label">${tile.label}</span>
+        <span class="stat-value">${tile.value}</span>
+        ${tile.sub}
+      </div>
+      <div class="stat-icon-wrapper ${tile.cls}"><i class="fa-solid ${tile.icon}"></i></div>
+    </div>
+  `).join('');
+
+  const labels = d.months.map(m => `${Number(m.split('-')[1])}月`);
+  const fullLabels = d.months.map(formatMonthLabel);
+
+  renderBarChart(document.getElementById('stats-revenue-chart'), {
+    labels, fullLabels,
+    series: [{ name: '營收', color: 'var(--series-1)', values: d.revenueByMonth }],
+    formatValue: formatCurrency,
+    formatAxis: formatAxisCurrency,
+    extraTooltip: i => `收款 ${d.paymentCountByMonth[i]} 筆`,
+    labelMax: true
+  });
+
+  document.getElementById('stats-worklog-legend').innerHTML = WORK_TYPE_SERIES.map(s =>
+    `<span class="viz-legend-item"><span class="viz-swatch" style="background: ${s.color};"></span>${s.key}</span>`
+  ).join('');
+  renderBarChart(document.getElementById('stats-worklog-chart'), {
+    labels, fullLabels,
+    series: WORK_TYPE_SERIES.map(s => ({ name: s.key, color: s.color, values: d.workOrdersByType[s.key] || [] })),
+    stacked: true,
+    formatValue: v => `${v} 件`,
+    formatAxis: v => String(v),
+    extraTooltip: i => `已完成 ${d.completedByMonth[i]} 件`
+  });
+
+  renderHBars(document.getElementById('stats-methods'),
+    d.paymentMethods.map(m => ({ label: m.method, value: m.amount, text: `${formatCurrency(m.amount)} · ${m.count} 筆` })),
+    '期間內尚無已收款紀錄');
+  renderHBars(document.getElementById('stats-projects'),
+    d.projectStatus.map(p => ({ label: p.status, value: p.count, text: `${p.count} 案` })),
+    '尚無專案資料');
+
+  renderTopCustomers(d.topCustomers, t.revenue);
+  renderMonthlyTable(d);
+}
+
+// 垂直長條圖（單一數列或堆疊），以 SVG 繪製並提供滑鼠 / 觸控提示
+function renderBarChart(el, opts) {
+  if (!el) return;
+  const { labels, fullLabels, series, stacked = false, formatValue, formatAxis, extraTooltip, labelMax = false } = opts;
+  const n = labels.length;
+  const totals = labels.map((_, i) => series.reduce((sum, s) => sum + (Number(s.values[i]) || 0), 0));
+  const maxVal = Math.max(...totals, 0);
+
+  if (maxVal === 0) {
+    el.innerHTML = '<p class="viz-empty">此期間尚無資料</p>';
+    return;
+  }
+
+  const width = Math.max(el.clientWidth, 280);
+  const height = 240;
+  const m = { top: 22, right: 8, bottom: 26, left: 48 };
+  const plotW = width - m.left - m.right;
+  const plotH = height - m.top - m.bottom;
+
+  // 「漂亮」的刻度上限
+  const rawStep = maxVal / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const step = [1, 2, 2.5, 5, 10].map(f => f * mag).find(s => s >= rawStep) || rawStep;
+  const yMax = Math.max(step * Math.ceil(maxVal / step), step);
+  const y = v => m.top + plotH - (v / yMax) * plotH;
+
+  const band = plotW / n;
+  const barW = Math.max(Math.min(band * 0.62, 40), 4);
+  const labelEvery = band >= 30 ? 1 : (band >= 16 ? 2 : 3);
+
+  let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" class="viz-svg">`;
+
+  // 格線與 Y 軸刻度（淡色、不搶資料）
+  for (let v = 0; v <= yMax + 1e-9; v += step) {
+    const yy = y(v);
+    svg += `<line x1="${m.left}" x2="${width - m.right}" y1="${yy}" y2="${yy}" class="viz-grid${v === 0 ? ' is-base' : ''}"/>`;
+    svg += `<text x="${m.left - 8}" y="${yy + 4}" class="viz-axis" text-anchor="end">${escapeHtml(formatAxis(v))}</text>`;
+  }
+
+  const maxIndex = totals.indexOf(maxVal);
+
+  labels.forEach((label, i) => {
+    const cx = m.left + band * i + band / 2;
+    const x = cx - barW / 2;
+    let base = 0;
+    const segs = series.map(s => ({ color: s.color, v: Number(s.values[i]) || 0 })).filter(s => s.v > 0);
+
+    segs.forEach((seg, k) => {
+      const yTop = y(base + seg.v);
+      let yBottom = y(base);
+      if (k > 0) yBottom -= 2; // 堆疊區段之間保留 2px 間隔
+      const h = Math.max(yBottom - yTop, 1);
+      const isTop = k === segs.length - 1;
+      const r = isTop ? Math.min(4, barW / 2, h) : 0;
+      svg += `<path d="${roundedTopRect(x, yTop, barW, h, r)}" fill="${seg.color}" class="viz-bar"/>`;
+      base += seg.v;
+    });
+
+    if (labelMax && i === maxIndex) {
+      svg += `<text x="${cx}" y="${y(totals[i]) - 6}" class="viz-value" text-anchor="middle">${escapeHtml(formatAxis(totals[i]))}</text>`;
+    }
+
+    if (i % labelEvery === 0) {
+      svg += `<text x="${cx}" y="${height - 8}" class="viz-axis" text-anchor="middle">${escapeHtml(label)}</text>`;
+    }
+
+    // 整欄的感應區（比長條大，方便手機點選）
+    svg += `<rect x="${m.left + band * i}" y="${m.top}" width="${band}" height="${plotH}" class="viz-hit" data-index="${i}"/>`;
+  });
+
+  svg += '</svg>';
+  el.innerHTML = svg;
+
+  const tooltipHtml = i => {
+    let html = `<div class="viz-tip-title">${escapeHtml(fullLabels[i])}</div>`;
+    if (series.length > 1) {
+      html += series.map(s => `<div class="viz-tip-row"><span class="viz-swatch" style="background: ${s.color};"></span>${escapeHtml(s.name)}<b>${escapeHtml(formatValue(Number(s.values[i]) || 0))}</b></div>`).join('');
+      html += `<div class="viz-tip-row is-total">合計<b>${escapeHtml(formatValue(totals[i]))}</b></div>`;
+    } else {
+      html += `<div class="viz-tip-row">${escapeHtml(series[0].name)}<b>${escapeHtml(formatValue(totals[i]))}</b></div>`;
+    }
+    if (extraTooltip) html += `<div class="viz-tip-sub">${escapeHtml(extraTooltip(i))}</div>`;
+    return html;
+  };
+
+  el.querySelectorAll('.viz-hit').forEach(hit => {
+    const show = evt => {
+      el.querySelectorAll('.viz-hit.is-active').forEach(h => h.classList.remove('is-active'));
+      hit.classList.add('is-active');
+      showVizTooltip(tooltipHtml(Number(hit.dataset.index)), evt);
+    };
+    hit.addEventListener('mouseenter', show);
+    hit.addEventListener('mousemove', evt => moveVizTooltip(evt));
+    hit.addEventListener('click', show);
+    hit.addEventListener('mouseleave', () => {
+      hit.classList.remove('is-active');
+      hideVizTooltip();
+    });
+  });
+}
+
+function roundedTopRect(x, y, w, h, r) {
+  return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
+}
+
+function getVizTooltip() {
+  let tip = document.getElementById('viz-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'viz-tooltip';
+    tip.className = 'viz-tooltip';
+    document.body.appendChild(tip);
+  }
+  return tip;
+}
+
+function showVizTooltip(html, evt) {
+  const tip = getVizTooltip();
+  tip.innerHTML = html;
+  tip.style.display = 'block';
+  moveVizTooltip(evt);
+}
+
+function moveVizTooltip(evt) {
+  const tip = getVizTooltip();
+  if (tip.style.display !== 'block' || !evt) return;
+  const pad = 12;
+  let left = evt.clientX + pad;
+  let top = evt.clientY + pad;
+  const rect = tip.getBoundingClientRect();
+  if (left + rect.width > window.innerWidth - 8) left = evt.clientX - rect.width - pad;
+  if (top + rect.height > window.innerHeight - 8) top = evt.clientY - rect.height - pad;
+  tip.style.left = `${Math.max(left, 8)}px`;
+  tip.style.top = `${Math.max(top, 8)}px`;
+}
+
+function hideVizTooltip() {
+  const tip = document.getElementById('viz-tooltip');
+  if (tip) tip.style.display = 'none';
+}
+
+// 水平長條（依數值排序的分類比較），每列直接標示數值
+function renderHBars(el, items, emptyText) {
+  if (!el) return;
+  if (!items.length) {
+    el.innerHTML = `<p class="viz-empty">${escapeHtml(emptyText)}</p>`;
+    return;
+  }
+  const max = Math.max(...items.map(i => i.value), 1);
+  el.innerHTML = items.map(item => `
+    <div class="viz-hbar-row" title="${escapeHtml(item.label)}：${escapeHtml(item.text)}">
+      <span class="viz-hbar-label">${escapeHtml(item.label)}</span>
+      <span class="viz-hbar-track"><span class="viz-hbar-fill" style="width: ${Math.max(item.value / max * 100, 1.5)}%;"></span></span>
+      <span class="viz-hbar-value">${escapeHtml(item.text)}</span>
+    </div>
+  `).join('');
+}
+
+function renderTopCustomers(list, totalRevenue) {
+  const el = document.getElementById('stats-top-customers');
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML = '<p class="viz-empty">期間內尚無已收款紀錄</p>';
+    return;
+  }
+  el.innerHTML = `
+    <table class="stats-table">
+      <thead><tr><th>#</th><th>客戶</th><th class="num">收款筆數</th><th class="num">營收</th><th class="num">占比</th></tr></thead>
+      <tbody>
+        ${list.map((c, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${c.customerId ? `<a href="javascript:void(0)" onclick="viewCustomerHistory(${c.customerId})">${escapeHtml(c.name)}</a>` : escapeHtml(c.name)}</td>
+            <td class="num">${c.count}</td>
+            <td class="num">${formatCurrency(c.amount)}</td>
+            <td class="num">${totalRevenue > 0 ? (c.amount / totalRevenue * 100).toFixed(1) : '0.0'}%</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function getMonthlyRows(d) {
+  return d.months.map((key, i) => ({
+    month: formatMonthLabel(key),
+    revenue: Number(d.revenueByMonth[i]) || 0,
+    payments: d.paymentCountByMonth[i] || 0,
+    workOrders: WORK_TYPE_SERIES.reduce((sum, s) => sum + ((d.workOrdersByType[s.key] || [])[i] || 0), 0),
+    byType: WORK_TYPE_SERIES.map(s => (d.workOrdersByType[s.key] || [])[i] || 0),
+    completed: d.completedByMonth[i] || 0,
+    newCustomers: d.newCustomersByMonth[i] || 0
+  }));
+}
+
+function renderMonthlyTable(d) {
+  const el = document.getElementById('stats-monthly-table');
+  if (!el) return;
+  const rows = getMonthlyRows(d);
+  const t = d.totals;
+  el.innerHTML = `
+    <table class="stats-table">
+      <thead>
+        <tr>
+          <th>月份</th><th class="num">營收</th><th class="num">收款筆數</th>
+          ${WORK_TYPE_SERIES.map(s => `<th class="num">${s.key}</th>`).join('')}
+          <th class="num">工單合計</th><th class="num">已完成</th><th class="num">新客戶</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.slice().reverse().map(r => `
+          <tr>
+            <td>${r.month}</td>
+            <td class="num">${formatCurrency(r.revenue)}</td>
+            <td class="num">${r.payments}</td>
+            ${r.byType.map(v => `<td class="num">${v}</td>`).join('')}
+            <td class="num">${r.workOrders}</td>
+            <td class="num">${r.completed}</td>
+            <td class="num">${r.newCustomers}</td>
+          </tr>`).join('')}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>合計</td>
+          <td class="num">${formatCurrency(t.revenue)}</td>
+          <td class="num">${t.paymentCount}</td>
+          ${WORK_TYPE_SERIES.map((s, k) => `<td class="num">${rows.reduce((sum, r) => sum + r.byType[k], 0)}</td>`).join('')}
+          <td class="num">${t.workOrders}</td>
+          <td class="num">${t.completedWorkOrders}</td>
+          <td class="num">${t.newCustomers}</td>
+        </tr>
+      </tfoot>
+    </table>`;
+}
+
+function exportStatsCsv() {
+  if (!statsData) {
+    alert('請先載入統計資料');
+    return;
+  }
+  const rows = getMonthlyRows(statsData);
+  const header = ['月份', '營收', '收款筆數', ...WORK_TYPE_SERIES.map(s => s.key), '工單合計', '已完成', '新客戶'];
+  const csvCell = v => {
+    const text = String(v);
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const lines = [header, ...rows.map(r => [r.month, r.revenue, r.payments, ...r.byType, r.workOrders, r.completed, r.newCustomers])]
+    .map(cols => cols.map(csvCell).join(','));
+  // 加上 BOM，Excel 開啟中文才不會亂碼
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `永倉月報表_${statsData.months[0]}_${statsData.months[statsData.months.length - 1]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// 視窗大小改變時重新繪製圖表（統計頁開啟時）
+window.addEventListener('resize', () => debounce(rerenderStatsIfVisible, 200)());
+function rerenderStatsIfVisible() {
+  const view = document.getElementById('view-stats');
+  if (statsData && view && view.style.display !== 'none') renderStats();
+}
+document.addEventListener('scroll', hideVizTooltip, { passive: true });

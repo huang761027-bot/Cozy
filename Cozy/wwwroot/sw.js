@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cozy-cache-v5';
+const CACHE_NAME = 'cozy-cache-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -32,19 +32,25 @@ self.addEventListener('fetch', event => {
   if (event.request.url.includes('/api/')) {
     event.respondWith(
       fetch(event.request).catch(() => {
-        return new Response(JSON.stringify({ error: "網路連線異常，請檢查網路狀態" }), {
-          headers: { 'Content-Type': 'application/json' }
+        return new Response(JSON.stringify({ message: "網路連線異常，請檢查網路狀態" }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' }
         });
       })
     );
     return;
   }
 
+  // Only GET requests can be cached
+  if (event.request.method !== 'GET') return;
+
   // Static assets network-first with cache fallback
   event.respondWith(
     fetch(event.request).then(response => {
-      const clone = response.clone();
-      caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+      if (response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+      }
       return response;
     }).catch(() => caches.match(event.request))
   );

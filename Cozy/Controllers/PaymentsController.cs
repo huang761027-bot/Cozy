@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Cozy.Data;
+using Cozy.Helpers;
 using Cozy.Models;
 
 namespace Cozy.Controllers
@@ -49,9 +50,12 @@ namespace Cozy.Controllers
             if (!string.IsNullOrWhiteSpace(month) && month.Length == 7) // "2026-09"
             {
                 if (int.TryParse(month.Substring(0, 4), out int year) &&
-                    int.TryParse(month.Substring(5, 2), out int m))
+                    int.TryParse(month.Substring(5, 2), out int m) && m >= 1 && m <= 12)
                 {
-                    query = query.Where(p => p.PaymentDate.Year == year && p.PaymentDate.Month == m);
+                    // 以台灣時間的月份範圍換算成 UTC 比較（也能使用索引）
+                    DateTime monthStartUtc = TaiwanTime.ToUtc(new DateTime(year, m, 1));
+                    DateTime monthEndUtc = TaiwanTime.ToUtc(new DateTime(year, m, 1).AddMonths(1));
+                    query = query.Where(p => p.PaymentDate >= monthStartUtc && p.PaymentDate < monthEndUtc);
                 }
             }
 
@@ -81,7 +85,8 @@ namespace Cozy.Controllers
                     p.PaymentMethod,
                     p.Status,
                     p.InvoiceNumber,
-                    p.InvoiceImageUrl,
+                    // 發票相片（base64）體積大，列表只回傳是否有相片，需要時再以 GET api/Payments/{id} 取得
+                    HasInvoiceImage = p.InvoiceImageUrl != null && p.InvoiceImageUrl != "",
                     p.Notes,
                     p.CreatedAt
                 })

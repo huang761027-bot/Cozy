@@ -79,16 +79,18 @@ namespace Cozy.Controllers
 
             var pendingWorkLogsCount = pendingWorkLogs.Count;
 
-            var monthRevenue = await _context.Payments
+            // 金額加總在記憶體中進行（SQLite 不支援 decimal SUM，本機開發也能正常顯示）
+            var monthRevenue = (await _context.Payments
                 .Where(p => p.PaymentDate >= firstDayOfMonth && p.Status == "已收款")
-                .SumAsync(p => (decimal?)p.Amount) ?? 0;
+                .Select(p => p.Amount)
+                .ToListAsync()).Sum();
 
-            var pendingPaymentsAmount = await _context.Payments
+            var pendingAmounts = await _context.Payments
                 .Where(p => p.Status == "待收款")
-                .SumAsync(p => (decimal?)p.Amount) ?? 0;
-
-            var pendingPaymentsCount = await _context.Payments
-                .CountAsync(p => p.Status == "待收款");
+                .Select(p => p.Amount)
+                .ToListAsync();
+            var pendingPaymentsAmount = pendingAmounts.Sum();
+            var pendingPaymentsCount = pendingAmounts.Count;
 
             var recentPayments = await _context.Payments
                 .Include(p => p.Customer)
