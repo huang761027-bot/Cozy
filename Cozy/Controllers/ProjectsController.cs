@@ -282,14 +282,16 @@ namespace Cozy.Controllers
                 return NotFound(new { message = "找不到此專案/案場" });
             }
 
-            // Clean up files on disk
-            foreach (var file in project.Files)
-            {
-                ProjectFileStorage.DeletePhysicalFile(_env, file.StoredFileName);
-            }
+            var storedFileNames = project.Files.Select(f => f.StoredFileName).ToList();
 
             _context.Projects.Remove(project);
             await _context.SaveChangesAsync();
+
+            // Clean up files on disk only after the database delete succeeded
+            foreach (var storedName in storedFileNames)
+            {
+                ProjectFileStorage.DeletePhysicalFile(_env, storedName);
+            }
 
             return Ok(new { message = "專案與相關檔案已刪除" });
         }
@@ -375,10 +377,10 @@ namespace Cozy.Controllers
                 return NotFound(new { message = "找不到此檔案" });
             }
 
-            ProjectFileStorage.DeletePhysicalFile(_env, file.StoredFileName);
-
             _context.ProjectFiles.Remove(file);
             await _context.SaveChangesAsync();
+
+            ProjectFileStorage.DeletePhysicalFile(_env, file.StoredFileName);
 
             return Ok(new { message = "檔案已刪除" });
         }

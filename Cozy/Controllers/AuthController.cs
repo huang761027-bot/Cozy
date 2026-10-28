@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Google.Apis.Auth;
@@ -68,9 +68,16 @@ namespace Cozy.Controllers
                     Audience = new[] { clientId }
                 });
             }
-            catch (Exception)
+            catch (Exception ex) when (ex is InvalidJwtException || ex is FormatException || ex is ArgumentException || ex is Newtonsoft.Json.JsonException)
             {
+                // 憑證格式錯誤、簽章無效、過期或不是發給本系統的 Token
                 return BadRequest(new { message = "無法驗證 Google 官方憑證（Token 無效或過期），請重新嘗試登入。" });
+            }
+            catch (Exception ex)
+            {
+                // 網路或 Google 憑證伺服器問題（非使用者的錯）
+                _logger.LogError(ex, "Unable to validate Google ID token (network or certificate fetch failure)");
+                return StatusCode(503, new { message = "暫時無法連線至 Google 驗證服務，請稍後再試。" });
             }
 
             if (string.IsNullOrWhiteSpace(payload.Email) || !payload.EmailVerified)

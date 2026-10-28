@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Cozy.Data;
+using Cozy.Helpers;
 using Cozy.Security;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -163,6 +164,20 @@ using (var scope = app.Services.CreateScope())
     catch (Exception ex)
     {
         logger.LogWarning("Notice during DB setup: {Message}", ex.Message);
+    }
+
+    // Move legacy uploads out of wwwroot so they can never be served as public static files
+    try
+    {
+        int movedFiles = ProjectFileStorage.MigrateLegacyUploads(app.Environment);
+        if (movedFiles > 0)
+        {
+            logger.LogInformation("Moved {Count} legacy upload(s) out of wwwroot", movedFiles);
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to move legacy uploads out of wwwroot");
     }
 }
 

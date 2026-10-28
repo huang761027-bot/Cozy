@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Cozy.Data;
 using Cozy.Models;
 
@@ -20,12 +21,13 @@ namespace Cozy.Security
             _next = next;
         }
 
-        public async Task InvokeAsync(HttpContext context, AppDbContext dbContext)
+        public async Task InvokeAsync(HttpContext context)
         {
             var path = context.Request.Path.Value ?? "";
 
-            // 0. Legacy uploads inside wwwroot must never be served publicly (use the authenticated download API)
-            if (path.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+            // 0. Legacy uploads inside wwwroot must never be served publicly (use the authenticated download API).
+            //    Trim leading slashes so "//uploads/..." cannot bypass the check. (Files are also moved out of wwwroot at startup.)
+            if (("/" + path.TrimStart('/', '\\')).StartsWith("/uploads", StringComparison.OrdinalIgnoreCase))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
                 return;
@@ -61,6 +63,8 @@ namespace Cozy.Security
                 return;
             }
 
+            // Resolve the DbContext only for API requests (static assets never touch the database)
+            var dbContext = context.RequestServices.GetRequiredService<AppDbContext>();
             SystemUser? user = await dbContext.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
 
             if (user == null || !user.IsActive)

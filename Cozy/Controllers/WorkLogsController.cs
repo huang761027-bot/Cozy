@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Cozy.Data;
 using Cozy.Models;
-using Cozy.Helpers;
 
 namespace Cozy.Controllers
 {
@@ -177,7 +176,7 @@ namespace Cozy.Controllers
 
                 if (workLog.ScheduledAt == default)
                 {
-                    workLog.ScheduledAt = TaiwanTime.Now;
+                    workLog.ScheduledAt = DateTime.UtcNow;
                 }
 
                 // 預設狀態為待處理
@@ -308,12 +307,12 @@ namespace Cozy.Controllers
                 sb.AppendLine("BEGIN:VEVENT");
                 sb.AppendLine($"UID:worklog-{w.Id}@cozy-system");
                 sb.AppendLine($"DTSTAMP:{DateTime.UtcNow:yyyyMMdd\\THHmmss\\Z}");
-                // ScheduledAt is stored as Taiwan local time; convert explicitly to UTC
-                sb.AppendLine($"DTSTART:{TaiwanTime.ToUtc(start):yyyyMMdd\\THHmmss\\Z}");
-                sb.AppendLine($"DTEND:{TaiwanTime.ToUtc(end):yyyyMMdd\\THHmmss\\Z}");
-                sb.AppendLine($"SUMMARY:{IcsEscape(title)}");
-                sb.AppendLine($"LOCATION:{IcsEscape(loc)}");
-                sb.AppendLine($"DESCRIPTION:{IcsEscape(desc)}");
+                // ScheduledAt is stored in UTC (frontend sends toISOString())
+                sb.AppendLine($"DTSTART:{start:yyyyMMdd\\THHmmss\\Z}");
+                sb.AppendLine($"DTEND:{end:yyyyMMdd\\THHmmss\\Z}");
+                sb.AppendLine(IcsFold($"SUMMARY:{IcsEscape(title)}"));
+                sb.AppendLine(IcsFold($"LOCATION:{IcsEscape(loc)}"));
+                sb.AppendLine(IcsFold($"DESCRIPTION:{IcsEscape(desc)}"));
                 sb.AppendLine("STATUS:CONFIRMED");
                 sb.AppendLine("END:VEVENT");
             }
@@ -333,6 +332,25 @@ namespace Cozy.Controllers
                  .Replace("\r\n", "\\n")
                  .Replace("\r", "\\n")
                  .Replace("\n", "\\n");
+
+        // Fold content lines longer than 75 octets (RFC 5545 §3.1) without splitting UTF-8 characters
+        private static string IcsFold(string line)
+        {
+            var sb = new System.Text.StringBuilder();
+            int octets = 0;
+            foreach (var rune in line.EnumerateRunes())
+            {
+                int len = rune.Utf8SequenceLength;
+                if (octets + len > 75)
+                {
+                    sb.Append("\n ");
+                    octets = 1; // leading space counts toward the next line
+                }
+                sb.Append(rune.ToString());
+                octets += len;
+            }
+            return sb.ToString();
+        }
 
         // DELETE: api/WorkLogs/5
         [HttpDelete("{id}")]

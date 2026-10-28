@@ -69,6 +69,14 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
+// Utility: 將 UTC 時間轉成本地時間字串，供 <input type="date"> / <input type="datetime-local"> 使用
+function toLocalInputValue(dateStr, withTime) {
+  const d = dateStr ? new Date(dateStr) : new Date();
+  if (isNaN(d.getTime())) return '';
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString();
+  return withTime ? local.slice(0, 16) : local.slice(0, 10);
+}
+
 // Utility: DateTime format
 function formatDateTime(dateStr) {
   if (!dateStr) return '';
@@ -834,7 +842,7 @@ async function openProjectFilesModal(projectId) {
     const p = await res.json();
 
     document.getElementById('modal-project-files-title').innerHTML = `<i class="fa-solid fa-folder-open" style="color: var(--primary);"></i> 檔案附件庫 - ${escapeHtml(p.name)}`;
-    document.getElementById('modal-project-files-sub').innerText = `專案編號: ${escapeHtml(p.projectNumber || '無')} | 關聯客戶: ${escapeHtml(p.customer ? p.customer.name : '未指定')}`;
+    document.getElementById('modal-project-files-sub').innerText = `專案編號: ${p.projectNumber || '無'} | 關聯客戶: ${p.customer ? p.customer.name : '未指定'}`;
     document.getElementById('project-files-total-badge').innerText = p.files ? p.files.length : 0;
 
     renderAttachedFilesList(p.files || []);
@@ -1147,7 +1155,7 @@ async function editWorkLog(id) {
   }
 
   document.getElementById('worklog-title-input').value = w.title || '';
-  document.getElementById('worklog-time').value = w.scheduledAt ? w.scheduledAt.substring(0, 16) : '';
+  document.getElementById('worklog-time').value = w.scheduledAt ? toLocalInputValue(w.scheduledAt, true) : '';
   document.getElementById('worklog-location').value = w.location || '';
   document.getElementById('worklog-status').value = w.status || '待處理';
   document.getElementById('worklog-is-priority').checked = !!w.isPriority;
@@ -1410,7 +1418,7 @@ function openPaymentModal(id = null, preSelectCustomerId = null, preSelectProjec
   if (!id) {
     document.getElementById('payment-title-input').value = '';
     document.getElementById('payment-amount').value = '5000';
-    document.getElementById('payment-date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('payment-date').value = toLocalInputValue(null, false);
     document.getElementById('payment-method').value = '現金';
     document.getElementById('payment-status').value = '已收款';
     document.getElementById('payment-invoice').value = '';
@@ -1444,7 +1452,7 @@ async function editPayment(id) {
 
   document.getElementById('payment-title-input').value = p.title || '';
   document.getElementById('payment-amount').value = p.amount;
-  document.getElementById('payment-date').value = p.paymentDate ? p.paymentDate.slice(0, 10) : '';
+  document.getElementById('payment-date').value = p.paymentDate ? toLocalInputValue(p.paymentDate, false) : '';
   document.getElementById('payment-method').value = p.paymentMethod || '現金';
   document.getElementById('payment-status').value = p.status || '已收款';
   document.getElementById('payment-invoice').value = p.invoiceNumber || '';

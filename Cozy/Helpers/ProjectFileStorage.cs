@@ -30,6 +30,31 @@ namespace Cozy.Helpers
             return File.Exists(legacy) ? legacy : null;
         }
 
+        // 啟動時將舊版存放於 wwwroot/uploads/projects 的檔案搬到新位置，避免被當成公開靜態檔案存取
+        public static int MigrateLegacyUploads(IWebHostEnvironment env)
+        {
+            string webRoot = env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot");
+            string legacyDir = Path.Combine(webRoot, "uploads", "projects");
+            if (!Directory.Exists(legacyDir)) return 0;
+
+            string targetDir = GetUploadDirectory(env);
+            int moved = 0;
+            foreach (string source in Directory.GetFiles(legacyDir))
+            {
+                string dest = Path.Combine(targetDir, Path.GetFileName(source));
+                if (File.Exists(dest))
+                {
+                    File.Delete(source);
+                }
+                else
+                {
+                    File.Move(source, dest);
+                }
+                moved++;
+            }
+            return moved;
+        }
+
         public static void DeletePhysicalFile(IWebHostEnvironment env, string storedName)
         {
             try

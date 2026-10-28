@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Cozy.Data;
 using Cozy.Models;
-using Cozy.Helpers;
 
 namespace Cozy.Controllers
 {
@@ -127,7 +126,7 @@ namespace Cozy.Controllers
 
                 if (payment.PaymentDate == default)
                 {
-                    payment.PaymentDate = TaiwanTime.Now;
+                    payment.PaymentDate = DateTime.UtcNow;
                 }
 
                 payment.CreatedAt = DateTime.UtcNow;
