@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Cozy.Data;
+using Cozy.Helpers;
 
 namespace Cozy.Controllers
 {
@@ -21,9 +22,9 @@ namespace Cozy.Controllers
         [HttpGet("stats")]
         public async Task<ActionResult<object>> GetDashboardStats()
         {
-            var now = DateTime.UtcNow;
-            var today = now.Date;
-            var firstDayOfMonth = new DateTime(now.Year, now.Month, 1);
+            // 時間以 UTC 儲存；本月起始日以台灣時間的 1 號 00:00 換算成 UTC
+            var taiwanNow = TaiwanTime.Now;
+            var firstDayOfMonth = TaiwanTime.ToUtc(new DateTime(taiwanNow.Year, taiwanNow.Month, 1));
 
             var totalCustomers = await _context.Customers.CountAsync();
 

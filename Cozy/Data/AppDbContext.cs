@@ -1,4 +1,6 @@
+﻿using System;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Cozy.Models;
 
 namespace Cozy.Data
@@ -17,6 +19,24 @@ namespace Cozy.Data
         public DbSet<Quotation> Quotations => Set<Quotation>();
         public DbSet<QuotationItem> QuotationItems => Set<QuotationItem>();
         public DbSet<Payment> Payments => Set<Payment>();
+
+        // 資料庫中所有時間皆以 UTC 儲存（前端以 toISOString() 送出）。
+        // 讀取時標記為 UTC，JSON 才會帶 "Z"，瀏覽器才會正確換算成台灣時間顯示。
+        private class UtcDateTimeConverter : ValueConverter<DateTime, DateTime>
+        {
+            public UtcDateTimeConverter()
+                : base(
+                    v => v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc))
+            {
+            }
+        }
+
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+        {
+            configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+            configurationBuilder.Properties<DateTime?>().HaveConversion<UtcDateTimeConverter>();
+        }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

@@ -1,9 +1,12 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Cozy.Data;
+using Cozy.Helpers;
 using Cozy.Models;
 
 namespace Cozy.Controllers
@@ -13,10 +16,14 @@ namespace Cozy.Controllers
     public class CustomersController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<CustomersController> _logger;
+        private readonly IWebHostEnvironment _env;
 
-        public CustomersController(AppDbContext context)
+        public CustomersController(AppDbContext context, IWebHostEnvironment env, ILogger<CustomersController> logger)
         {
+            _logger = logger;
             _context = context;
+            _env = env;
         }
 
         // GET: api/Customers
@@ -88,7 +95,8 @@ namespace Cozy.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "儲存客戶失敗: " + ex.Message });
+                _logger.LogError(ex, "儲存客戶失敗");
+                return StatusCode(500, new { message = "儲存客戶失敗，請稍後再試。" });
             }
         }
 
@@ -132,7 +140,8 @@ namespace Cozy.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "更新客戶失敗: " + ex.Message });
+                _logger.LogError(ex, "更新客戶失敗");
+                return StatusCode(500, new { message = "更新客戶失敗，請稍後再試。" });
             }
         }
 
@@ -146,8 +155,19 @@ namespace Cozy.Controllers
                 return NotFound(new { message = "找不到此客戶" });
             }
 
+            // 刪除客戶會連帶刪除其專案與附件紀錄（資料庫 Cascade），先收集實體檔案名稱以便清除硬碟檔案
+            var storedFileNames = await _context.ProjectFiles
+                .Where(f => f.Project != null && f.Project.CustomerId == id)
+                .Select(f => f.StoredFileName)
+                .ToListAsync();
+
             _context.Customers.Remove(customer);
             await _context.SaveChangesAsync();
+
+            foreach (var storedName in storedFileNames)
+            {
+                ProjectFileStorage.DeletePhysicalFile(_env, storedName);
+            }
 
             return Ok(new { message = "客戶已刪除" });
         }

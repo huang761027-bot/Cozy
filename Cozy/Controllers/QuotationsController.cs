@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Cozy.Data;
 using Cozy.Models;
 
@@ -14,9 +15,11 @@ namespace Cozy.Controllers
     public class QuotationsController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<QuotationsController> _logger;
 
-        public QuotationsController(AppDbContext context)
+        public QuotationsController(AppDbContext context, ILogger<QuotationsController> logger)
         {
+            _logger = logger;
             _context = context;
         }
 
@@ -134,7 +137,8 @@ namespace Cozy.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "儲存報價單失敗: " + ex.Message });
+                _logger.LogError(ex, "儲存報價單失敗");
+                return StatusCode(500, new { message = "儲存報價單失敗，請稍後再試。" });
             }
         }
 

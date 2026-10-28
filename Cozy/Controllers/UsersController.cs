@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Cozy.Data;
 using Cozy.Models;
+using Cozy.Security;
 
 namespace Cozy.Controllers
 {
@@ -23,15 +24,21 @@ namespace Cozy.Controllers
         // Helper to check admin permission
         private async Task<bool> IsAdminAsync()
         {
-            string? email = Request.Cookies["Cozy_User_Email"] ?? Request.Headers["X-User-Email"].FirstOrDefault();
+            string? email = CozySession.GetEmail(HttpContext);
             if (string.IsNullOrWhiteSpace(email)) return false;
-
-            email = email.Trim().ToLowerInvariant();
-            string rootAdmin = (Environment.GetEnvironmentVariable("SUPER_ADMIN_EMAIL") ?? "huang761027@gmail.com").ToLowerInvariant();
-            if (email == rootAdmin) return true;
+            if (email == CozySession.RootAdminEmail) return true;
 
             var user = await _context.SystemUsers.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
             return user != null && user.IsActive && user.Role == "Admin";
+        }
+
+        // 角色只允許 Admin / Staff（不分大小寫），其餘視為無效
+        private static string? NormalizeRole(string? role)
+        {
+            if (string.IsNullOrWhiteSpace(role)) return null;
+            if (string.Equals(role.Trim(), "Admin", StringComparison.OrdinalIgnoreCase)) return "Admin";
+            if (string.Equals(role.Trim(), "Staff", StringComparison.OrdinalIgnoreCase)) return "Staff";
+            return "";
         }
 
         // GET: api/Users
@@ -73,7 +80,12 @@ namespace Cozy.Controllers
 
             newUser.Email = cleanEmail;
             newUser.Name = !string.IsNullOrWhiteSpace(newUser.Name) ? newUser.Name.Trim() : cleanEmail.Split('@')[0];
-            newUser.Role = !string.IsNullOrWhiteSpace(newUser.Role) ? newUser.Role : "Staff";
+            string? role = NormalizeRole(newUser.Role);
+            if (role == "")
+            {
+                return BadRequest(new { message = "角色只能是 Admin 或 Staff" });
+            }
+            newUser.Role = role ?? "Staff";
             newUser.CreatedAt = DateTime.UtcNow;
 
             _context.SystemUsers.Add(newUser);
@@ -97,16 +109,20 @@ namespace Cozy.Controllers
                 return NotFound(new { message = "找不到此使用者" });
             }
 
-            string rootAdmin = (Environment.GetEnvironmentVariable("SUPER_ADMIN_EMAIL") ?? "huang761027@gmail.com").ToLowerInvariant();
-            
+            string? role = NormalizeRole(updated.Role);
+            if (role == "")
+            {
+                return BadRequest(new { message = "角色只能是 Admin 或 Staff" });
+            }
+
             // Prevent demoting or deactivating root super admin
-            if (existing.Email.ToLower() == rootAdmin && (!updated.IsActive || updated.Role != "Admin"))
+            if (existing.Email.ToLower() == CozySession.RootAdminEmail && (!updated.IsActive || (role ?? existing.Role) != "Admin"))
             {
                 return BadRequest(new { message = "創始超級管理者不可被停用或取消管理員權限" });
             }
 
             existing.Name = !string.IsNullOrWhiteSpace(updated.Name) ? updated.Name.Trim() : existing.Name;
-            existing.Role = !string.IsNullOrWhiteSpace(updated.Role) ? updated.Role : existing.Role;
+            existing.Role = role ?? existing.Role;
             existing.IsActive = updated.IsActive;
 
             await _context.SaveChangesAsync();
@@ -128,8 +144,7 @@ namespace Cozy.Controllers
                 return NotFound(new { message = "找不到此使用者" });
             }
 
-            string rootAdmin = (Environment.GetEnvironmentVariable("SUPER_ADMIN_EMAIL") ?? "huang761027@gmail.com").ToLowerInvariant();
-            if (user.Email.ToLower() == rootAdmin)
+            if (user.Email.ToLower() == CozySession.RootAdminEmail)
             {
                 return BadRequest(new { message = "創始超級管理者帳號不可刪除" });
             }
